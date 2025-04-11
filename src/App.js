@@ -12,13 +12,26 @@ export default function App() {
   const [mesSelecionado, setMesSelecionado] = useState(hoje.getMonth());
   const [anoSelecionado, setAnoSelecionado] = useState(hoje.getFullYear());
   
+  // Estado para armazenar os nomes dos usuários
+  const [usuarios, setUsuarios] = useState(() => {
+    const savedUsuarios = localStorage.getItem("usuarios");
+    return savedUsuarios ? JSON.parse(savedUsuarios) : ["Usuário 1", "Usuário 2"];
+  });
+  
+  const [novoUsuario, setNovoUsuario] = useState("");
+  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
+  
   const [form, setForm] = useState({
     id: null,
     data: "",
     descricao: "",
     parcelas: 1,
     valor: "",
-    quem: ""
+    quem: "", // Quem pagou inicialmente
+    compartilhada: false, // Nova propriedade para indicar se é compartilhada
+    divisao: [ // Nova propriedade para definir a divisão da compra
+      { usuario: "", percentual: 100 }
+    ]
   });
 
   useEffect(() => {
@@ -29,22 +42,129 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("compras", JSON.stringify(compras));
   }, [compras]);
+  
+  useEffect(() => {
+    localStorage.setItem("usuarios", JSON.stringify(usuarios));
+  }, [usuarios]);
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+    const { name, value, type, checked } = e.target;
+    
+    if (name === "compartilhada") {
+      // Se estiver marcando como compartilhada, inicializa a divisão
+      if (checked && !form.divisao.length) {
+        setForm({
+          ...form,
+          compartilhada: checked,
+          divisao: usuarios.map((usuario, index) => ({
+            usuario,
+            percentual: index === 0 ? 100 : 0
+          }))
+        });
+      } else {
+        setForm({ ...form, compartilhada: checked });
+      }
+    } else {
+      setForm({ ...form, [name]: type === "checkbox" ? checked : value });
+    }
+  };
+  
+  const handleDivisaoChange = (index, campo, valor) => {
+    const novasDivisoes = [...form.divisao];
+    novasDivisoes[index] = { ...novasDivisoes[index], [campo]: valor };
+    
+    // Ajusta os percentuais para garantir que somem 100%
+    if (campo === "percentual") {
+      const total = novasDivisoes.reduce((sum, item, idx) => 
+        idx === index ? sum + parseInt(valor || 0) : sum + parseInt(item.percentual || 0), 0);
+      
+      if (total > 100) {
+        // Se passou de 100%, ajusta proporcionalmente os outros valores
+        const excesso = total - 100;
+        const outrosTotal = total - parseInt(valor || 0);
+        
+        if (outrosTotal > 0) {
+          novasDivisoes.forEach((item, idx) => {
+            if (idx !== index) {
+              const percentualAtual = parseInt(item.percentual || 0);
+              const reducao = Math.min(percentualAtual, Math.round((percentualAtual / outrosTotal) * excesso));
+              novasDivisoes[idx].percentual = Math.max(0, percentualAtual - reducao).toString();
+            }
+          });
+        } else {
+          novasDivisoes[index].percentual = "100";
+        }
+      }
+    }
+    
+    setForm({ ...form, divisao: novasDivisoes });
+  };
+  
+  const adicionarDivisao = () => {
+    // Encontra um usuário que ainda não está na divisão
+    const usuariosAtuais = form.divisao.map(d => d.usuario);
+    const usuarioDisponivel = usuarios.find(u => !usuariosAtuais.includes(u));
+    
+    if (usuarioDisponivel) {
+      const novasDivisoes = [...form.divisao, { usuario: usuarioDisponivel, percentual: 0 }];
+      setForm({ ...form, divisao: novasDivisoes });
+    }
+  };
+  
+  const removerDivisao = (index) => {
+    if (form.divisao.length > 1) {
+      const novasDivisoes = form.divisao.filter((_, idx) => idx !== index);
+      
+      // Recalcula para garantir que totalize 100%
+      const totalAtual = novasDivisoes.reduce((sum, item) => sum + parseInt(item.percentual || 0), 0);
+      if (totalAtual < 100 && novasDivisoes.length > 0) {
+        // Adiciona a diferença ao primeiro item
+        const diferenca = 100 - totalAtual;
+        novasDivisoes[0].percentual = (parseInt(novasDivisoes[0].percentual || 0) + diferenca).toString();
+      }
+      
+      setForm({ ...form, divisao: novasDivisoes });
+    }
   };
 
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    // Normalizar os dados do formulário
+    const formProcessado = { ...form };
+    
+    // Se não for compartilhada, garantir que a divisão seja ajustada
+    if (!formProcessado.compartilhada) {
+      formProcessado.divisao = [{ usuario: formProcessado.quem, percentual: 100 }];
+    } else {
+      // Garantir que a divisão some 100%
+      const totalPercentual = formProcessado.divisao.reduce((sum, item) => sum + parseInt(item.percentual || 0), 0);
+      
+      if (totalPercentual !== 100) {
+        const diferenca = 100 - totalPercentual;
+        // Adiciona a diferença ao maior percentual
+        let maiorIndex = 0;
+        let maiorValor = 0;
+        
+        formProcessado.divisao.forEach((item, index) => {
+          const percentual = parseInt(item.percentual || 0);
+          if (percentual > maiorValor) {
+            maiorValor = percentual;
+            maiorIndex = index;
+          }
+        });
+        
+        formProcessado.divisao[maiorIndex].percentual = (parseInt(formProcessado.divisao[maiorIndex].percentual || 0) + diferenca).toString();
+      }
+    }
+    
     if (form.id) {
       // Edição
-      setCompras(compras.map(comp => comp.id === form.id ? { ...form } : comp));
+      setCompras(compras.map(comp => comp.id === form.id ? { ...formProcessado } : comp));
     } else {
       // Nova compra
       const novaCompra = { 
-        ...form, 
+        ...formProcessado, 
         id: Date.now().toString(), 
         dataRegistro: new Date().toISOString() 
       };
@@ -61,26 +181,68 @@ export default function App() {
       descricao: "",
       parcelas: 1,
       valor: "",
-      quem: ""
+      quem: "",
+      compartilhada: false,
+      divisao: [{ usuario: "", percentual: 100 }]
     });
     setCompraParaEditar(null);
   };
 
   const editarCompra = (compra) => {
     setCompraParaEditar(compra);
-    setForm({
-      id: compra.id,
-      data: compra.data,
-      descricao: compra.descricao,
-      parcelas: compra.parcelas,
-      valor: compra.valor,
-      quem: compra.quem
-    });
+    
+    // Garantir que a compra tenha as novas propriedades
+    const compraCompleta = {
+      ...compra,
+      compartilhada: compra.compartilhada || false,
+      divisao: compra.divisao || [{ usuario: compra.quem, percentual: 100 }]
+    };
+    
+    setForm(compraCompleta);
   };
 
   const excluirCompra = (id) => {
     if (window.confirm("Tem certeza que deseja excluir esta compra?")) {
       setCompras(compras.filter(c => c.id !== id));
+    }
+  };
+  
+  const adicionarUsuario = () => {
+    if (novoUsuario.trim() && !usuarios.includes(novoUsuario.trim())) {
+      setUsuarios([...usuarios, novoUsuario.trim()]);
+      setNovoUsuario("");
+    }
+  };
+  
+  const removerUsuario = (usuario) => {
+    if (usuarios.length > 2) {
+      if (window.confirm(`Tem certeza que deseja remover "${usuario}"?`)) {
+        setUsuarios(usuarios.filter(u => u !== usuario));
+        
+        // Atualiza as compras que usam este usuário
+        setCompras(compras.map(compra => {
+          // Se o pagador for o usuário removido, substitui pelo primeiro da lista
+          const novaCompra = { ...compra };
+          if (novaCompra.quem === usuario) {
+            const novoQuem = usuarios.find(u => u !== usuario);
+            novaCompra.quem = novoQuem || usuarios[0];
+          }
+          
+          // Atualiza divisões se existirem
+          if (novaCompra.divisao) {
+            novaCompra.divisao = novaCompra.divisao.map(div => {
+              if (div.usuario === usuario) {
+                return { ...div, usuario: usuarios.find(u => u !== usuario) || usuarios[0] };
+              }
+              return div;
+            });
+          }
+          
+          return novaCompra;
+        }));
+      }
+    } else {
+      alert("É necessário manter pelo menos dois usuários.");
     }
   };
 
@@ -119,7 +281,8 @@ export default function App() {
       
       // Aplicar o filtro de texto
       const atendeFiltroBusca = c.descricao.toLowerCase().includes(filtro.toLowerCase()) || 
-                                c.quem.toLowerCase().includes(filtro.toLowerCase());
+                                (c.quem && c.quem.toLowerCase().includes(filtro.toLowerCase())) ||
+                                (c.divisao && c.divisao.some(d => d.usuario.toLowerCase().includes(filtro.toLowerCase())));
       
       return (mostrarFinalizadas || temParcelaNesteMes) && atendeFiltroBusca;
     })
@@ -140,8 +303,12 @@ export default function App() {
 
   // Calcula os totais para o mês selecionado
   const calcularTotais = () => {
-    let totalJoao = 0;
-    let totalVoce = 0;
+    // Inicializa um objeto para guardar os totais por usuário
+    const totaisPorUsuario = {};
+    usuarios.forEach(usuario => {
+      totaisPorUsuario[usuario] = 0;
+    });
+    
     let totalGeral = 0;
     
     compras.forEach(compra => {
@@ -152,20 +319,34 @@ export default function App() {
       if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
         const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
         
-        if (compra.quem === "João") {
-          totalJoao += valorParcelaAtual;
-        } else if (compra.quem === "Marcos") {
-          totalVoce += valorParcelaAtual;
+        // Se for compartilhada, divide conforme os percentuais
+        if (compra.compartilhada && compra.divisao && compra.divisao.length > 0) {
+          compra.divisao.forEach(div => {
+            const percentual = parseInt(div.percentual || 0) / 100;
+            const valorUsuario = valorParcelaAtual * percentual;
+            
+            if (totaisPorUsuario[div.usuario] !== undefined) {
+              totaisPorUsuario[div.usuario] += valorUsuario;
+            } else {
+              // Se o usuário não existir mais, adiciona ao total do pagador
+              if (totaisPorUsuario[compra.quem] !== undefined) {
+                totaisPorUsuario[compra.quem] += valorUsuario;
+              }
+            }
+          });
+        } else if (totaisPorUsuario[compra.quem] !== undefined) {
+          // Se não for compartilhada, adiciona tudo para quem pagou
+          totaisPorUsuario[compra.quem] += valorParcelaAtual;
         }
         
         totalGeral += valorParcelaAtual;
       }
     });
     
-    return { totalJoao, totalVoce, totalGeral };
+    return { totaisPorUsuario, totalGeral };
   };
 
-  const { totalJoao, totalVoce, totalGeral } = calcularTotais();
+  const { totaisPorUsuario, totalGeral } = calcularTotais();
 
   // Função para avançar ou voltar meses
   const mudarMes = (delta) => {
@@ -189,11 +370,93 @@ export default function App() {
     "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
     "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
   ];
+  
+  // Gerar cores para os usuários
+  const coresUsuarios = {
+    [usuarios[0]]: "bg-blue-500 text-white",
+    [usuarios[1]]: "bg-green-500 text-white",
+  };
+  
+  // Para usuários adicionais, gerar cores aleatórias
+  usuarios.slice(2).forEach((usuario, index) => {
+    const cores = [
+      "bg-purple-500 text-white",
+      "bg-yellow-500 text-black",
+      "bg-red-500 text-white",
+      "bg-indigo-500 text-white",
+      "bg-pink-500 text-white",
+      "bg-teal-500 text-white"
+    ];
+    coresUsuarios[usuario] = cores[index % cores.length];
+  });
 
   return (
     <div className="max-w-6xl mx-auto p-4">
       <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h1 className="text-2xl font-bold text-center mb-6 text-blue-700">Controle de Cartão Compartilhado</h1>
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-2xl font-bold text-blue-700">Controle de Cartão Compartilhado</h1>
+          <button
+            onClick={() => setMostrarModalUsuarios(true)}
+            className="bg-blue-600 text-white py-1 px-3 rounded hover:bg-blue-700 text-sm"
+          >
+            Gerenciar Usuários
+          </button>
+        </div>
+        
+        {/* Modal de Gerenciamento de Usuários */}
+        {mostrarModalUsuarios && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h2 className="text-xl font-semibold mb-4">Gerenciar Usuários</h2>
+              
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Adicionar Novo Usuário</label>
+                <div className="flex">
+                  <input 
+                    type="text" 
+                    value={novoUsuario} 
+                    onChange={(e) => setNovoUsuario(e.target.value)} 
+                    placeholder="Nome do usuário" 
+                    className="flex-1 p-2 border border-gray-300 rounded-l"
+                  />
+                  <button 
+                    onClick={adicionarUsuario}
+                    className="bg-blue-600 text-white py-2 px-4 rounded-r hover:bg-blue-700"
+                  >
+                    Adicionar
+                  </button>
+                </div>
+              </div>
+              
+              <div className="mb-4">
+                <h3 className="text-lg font-medium mb-2">Usuários Atuais</h3>
+                <ul className="divide-y divide-gray-200">
+                  {usuarios.map((usuario, index) => (
+                    <li key={index} className="py-2 flex justify-between items-center">
+                      <span className={`px-2 py-1 rounded ${coresUsuarios[usuario]}`}>{usuario}</span>
+                      <button 
+                        onClick={() => removerUsuario(usuario)}
+                        className="text-red-500 hover:text-red-700"
+                        disabled={usuarios.length <= 2}
+                      >
+                        Remover
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              
+              <div className="flex justify-end">
+                <button 
+                  onClick={() => setMostrarModalUsuarios(false)}
+                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                >
+                  Fechar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         
         {/* Navegação de meses */}
         <div className="flex justify-center items-center mb-6">
@@ -218,15 +481,15 @@ export default function App() {
         </div>
         
         {/* Resumo financeiro */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-blue-50 p-4 rounded-lg shadow text-center">
-            <h3 className="font-semibold text-lg">Total João</h3>
-            <p className="text-2xl font-bold text-blue-600">R${totalJoao.toFixed(2)}</p>
-          </div>
-          <div className="bg-green-50 p-4 rounded-lg shadow text-center">
-            <h3 className="font-semibold text-lg">Total Marcos</h3>
-            <p className="text-2xl font-bold text-green-600">R${totalVoce.toFixed(2)}</p>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+          {usuarios.map((usuario, index) => (
+            <div key={index} className={`p-4 rounded-lg shadow text-center ${index % 2 === 0 ? 'bg-blue-50' : 'bg-green-50'}`}>
+              <h3 className="font-semibold text-lg">Total {usuario}</h3>
+              <p className={`text-2xl font-bold ${index % 2 === 0 ? 'text-blue-600' : 'text-green-600'}`}>
+                R${totaisPorUsuario[usuario].toFixed(2)}
+              </p>
+            </div>
+          ))}
           <div className="bg-purple-50 p-4 rounded-lg shadow text-center">
             <h3 className="font-semibold text-lg">Total Geral</h3>
             <p className="text-2xl font-bold text-purple-600">R${totalGeral.toFixed(2)}</p>
@@ -303,11 +566,94 @@ export default function App() {
                 className="w-full p-2 border border-gray-300 rounded"
               >
                 <option value="">Selecione</option>
-                <option value="João">João</option>
-                <option value="Marcos">Marcos</option>
+                {usuarios.map((usuario, index) => (
+                  <option key={index} value={usuario}>{usuario}</option>
+                ))}
               </select>
             </div>
+            
+            <div className="flex items-center py-2">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="compartilhada"
+                  checked={form.compartilhada}
+                  onChange={handleChange}
+                  className="form-checkbox h-5 w-5 text-blue-600"
+                />
+                <span className="ml-2 text-gray-700">Compra compartilhada</span>
+              </label>
+            </div>
           </div>
+          
+          {/* Seção de divisão da compra */}
+          {form.compartilhada && (
+            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-medium">Divisão da Compra</h3>
+                <button 
+                  type="button"
+                  onClick={adicionarDivisao}
+                  disabled={form.divisao.length >= usuarios.length}
+                  className={`text-sm ${form.divisao.length >= usuarios.length ? 'text-gray-400' : 'text-blue-600 hover:text-blue-800'}`}
+                >
+                  + Adicionar Usuário
+                </button>
+              </div>
+              
+              <div className="space-y-2">
+                {form.divisao.map((div, index) => (
+                  <div key={index} className="flex items-center space-x-2 p-2 bg-white rounded">
+                    <select
+                      value={div.usuario}
+                      onChange={(e) => handleDivisaoChange(index, "usuario", e.target.value)}
+                      className="flex-1 p-2 border border-gray-300 rounded"
+                    >
+                      <option value="">Selecione um usuário</option>
+                      {usuarios.map((usuario, i) => (
+                        <option 
+                          key={i} 
+                          value={usuario}
+                          disabled={form.divisao.some((d, idx) => idx !== index && d.usuario === usuario)}
+                        >
+                          {usuario}
+                        </option>
+                      ))}
+                    </select>
+                    
+                    <div className="flex items-center space-x-1">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={div.percentual}
+                        onChange={(e) => handleDivisaoChange(index, "percentual", e.target.value)}
+                        className="w-16 p-2 border border-gray-300 rounded"
+                      />
+                      <span>%</span>
+                    </div>
+                    
+                    {form.divisao.length > 1 && (
+                      <button 
+                        type="button"
+                        onClick={() => removerDivisao(index)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        &times;
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-2 text-sm text-gray-600">
+                Total: {form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0)}%
+                {form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0) !== 100 && (
+                  <span className="text-red-500 ml-2">Deve totalizar 100%</span>
+                )}
+              </div>
+            </div>
+          )}
           
           <div className="flex justify-end mt-4 space-x-2">
             {compraParaEditar && (
@@ -322,6 +668,7 @@ export default function App() {
             <button 
               type="submit" 
               className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+              disabled={form.compartilhada && form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0) !== 100}
             >
               {compraParaEditar ? "Atualizar" : "Adicionar"}
             </button>
