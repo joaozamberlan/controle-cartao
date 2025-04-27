@@ -923,46 +923,45 @@ export default function App() {
 
         {mostrarModalCategorias && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
               <h2 className="text-xl font-semibold mb-4">Gerenciar Categorias</h2>
               
-              <div className="mb-6">
-                <h3 className="text-lg font-medium mb-2">Nova Categoria</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input
-                    type="text"
-                    placeholder="Nome da categoria"
-                    value={categoriaParaEditar?.nome || ""}
-                    onChange={(e) => setCategoriaParaEditar(prev => ({
-                      ...prev,
-                      nome: e.target.value
-                    }))}
-                    className="p-2 border border-gray-300 rounded"
-                  />
-                  <input
-                    type="text"
-                    placeholder="Ícone (ex: mdi:food)"
-                    value={categoriaParaEditar?.icone || ""}
-                    onChange={(e) => setCategoriaParaEditar(prev => ({
-                      ...prev,
-                      icone: e.target.value
-                    }))}
-                    className="p-2 border border-gray-300 rounded"
-                  />
-                  <input
-                    type="color"
-                    value={categoriaParaEditar?.cor || "#000000"}
-                    onChange={(e) => setCategoriaParaEditar(prev => ({
-                      ...prev,
-                      cor: e.target.value
-                    }))}
-                    className="p-2 border border-gray-300 rounded"
-                  />
+              <div className="overflow-y-auto flex-1"> {/* Container com scroll */}
+                <div className="mb-6">
+                  <h3 className="text-lg font-medium mb-2">Nova Categoria</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <input
+                      type="text"
+                      placeholder="Nome da categoria"
+                      value={categoriaParaEditar?.nome || ""}
+                      onChange={(e) => setCategoriaParaEditar(prev => ({
+                        ...prev,
+                        nome: e.target.value
+                      }))}
+                      className="p-2 border border-gray-300 rounded"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Ícone (ex: mdi:food)"
+                      value={categoriaParaEditar?.icone || ""}
+                      onChange={(e) => setCategoriaParaEditar(prev => ({
+                        ...prev,
+                        icone: e.target.value
+                      }))}
+                      className="p-2 border border-gray-300 rounded"
+                    />
+                    <input
+                      type="color"
+                      value={categoriaParaEditar?.cor || "#000000"}
+                      onChange={(e) => setCategoriaParaEditar(prev => ({
+                        ...prev,
+                        cor: e.target.value
+                      }))}
+                      className="p-2 border border-gray-300 rounded"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="mb-4">
-                <h3 className="text-lg font-medium mb-2">Categorias Existentes</h3>
                 <div className="space-y-4">
                   {categorias.map((categoria) => (
                     <div key={categoria.id} className="border p-4 rounded">
@@ -1031,7 +1030,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex justify-end mt-4 pt-4 border-t">
                 <button
                   onClick={fecharModalCategorias}
                   className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
