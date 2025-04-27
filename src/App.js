@@ -301,42 +301,37 @@ export default function App() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
-    const formProcessado = { ...form };
-    
-    if (!formProcessado.compartilhada) {
-      formProcessado.divisao = [{ usuario: formProcessado.quem, percentual: 100 }];
-    } else {
-      const totalPercentual = formProcessado.divisao.reduce((sum, item) => sum + parseInt(item.percentual || 0), 0);
+    try {
+      console.log('Form submetido:', form); // Debug
+      const formProcessado = { ...form };
+      console.log('Form processado:', formProcessado); // Debug
       
-      if (totalPercentual !== 100) {
-        const diferenca = 100 - totalPercentual;
-        let maiorIndex = 0;
-        let maiorValor = 0;
-        
-        formProcessado.divisao.forEach((item, index) => {
-          const percentual = parseInt(item.percentual || 0);
-          if (percentual > maiorValor) {
-            maiorValor = percentual;
-            maiorIndex = index;
-          }
-        });
-        
-        formProcessado.divisao[maiorIndex].percentual = (parseInt(formProcessado.divisao[maiorIndex].percentual || 0) + diferenca).toString();
+      if (!formProcessado.compartilhada) {
+        formProcessado.divisao = [{ usuario: formProcessado.quem, percentual: 100 }];
       }
+      
+      // Validar categoria
+      if (!formProcessado.categoria) {
+        formProcessado.categoria = categorias[0]?.id || "";
+      }
+      
+      if (form.id) {
+        setCompras(compras.map(comp => comp.id === form.id ? { ...formProcessado } : comp));
+      } else {
+        const novaCompra = { 
+          ...formProcessado, 
+          id: Date.now().toString(), 
+          dataRegistro: new Date().toISOString() 
+        };
+        setCompras(prevCompras => [...prevCompras, novaCompra]);
+      }
+      
+      resetForm();
+      console.log('Compra salva com sucesso'); // Debug
+    } catch (error) {
+      console.error('Erro ao salvar compra:', error);
+      alert('Erro ao salvar a compra. Por favor, verifique os dados.');
     }
-    
-    if (form.id) {
-      setCompras(compras.map(comp => comp.id === form.id ? { ...formProcessado } : comp));
-    } else {
-      const novaCompra = { 
-        ...formProcessado, 
-        id: Date.now().toString(), 
-        dataRegistro: new Date().toISOString() 
-      };
-      setCompras([...compras, novaCompra]);
-    }
-    
-    resetForm();
   };
 
   const resetForm = () => {
@@ -349,7 +344,7 @@ export default function App() {
       quem: "",
       compartilhada: false,
       divisao: [{ usuario: "", percentual: 100 }],
-      categoria: "Outros",
+      categoria: categorias[0]?.id || "", // Usar o ID da primeira categoria ao invés de "Outros"
       cartao: "",
       recorrente: false,
       frequencia: "mensal",
