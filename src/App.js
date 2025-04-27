@@ -31,6 +31,28 @@ const COLORS = [
 ];
 
 export default function App() {
+  // 1. Constants
+  const hoje = new Date();
+  const nomesMeses = [
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+  ];
+
+  // 2. States
+  const [mesSelecionado, setMesSelecionado] = useState(hoje.getMonth());
+  const [anoSelecionado, setAnoSelecionado] = useState(hoje.getFullYear());
+  const [compras, setCompras] = useState(() => {
+    const savedCompras = localStorage.getItem("compras");
+    return savedCompras ? JSON.parse(savedCompras) : [];
+  });
+  const [usuarios, setUsuarios] = useState(() => {
+    const savedUsuarios = localStorage.getItem("usuarios");
+    return savedUsuarios ? JSON.parse(savedUsuarios) : ["Usuário 1", "Usuário 2"];
+  });
+  const [cartoes, setCartoes] = useState(() => {
+    const savedCartoes = localStorage.getItem("cartoes");
+    return savedCartoes ? JSON.parse(savedCartoes) : ["Nubank", "Inter"];
+  });
   const [categorias, setCategorias] = useState(() => {
     const savedCategorias = localStorage.getItem("categorias");
     return savedCategorias ? JSON.parse(savedCategorias) : [
@@ -134,33 +156,8 @@ export default function App() {
       }
     ];
   });
-
-  const [compras, setCompras] = useState([]);
-  const [compraParaEditar, setCompraParaEditar] = useState(null);
-  const [filtro, setFiltro] = useState("");
-  const [ordenacao, setOrdenacao] = useState("data-desc");
-  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(true);
   
-  const hoje = new Date();
-  const [mesSelecionado, setMesSelecionado] = useState(hoje.getMonth());
-  const [anoSelecionado, setAnoSelecionado] = useState(hoje.getFullYear());
-  
-  const [usuarios, setUsuarios] = useState(() => {
-    const savedUsuarios = localStorage.getItem("usuarios");
-    return savedUsuarios ? JSON.parse(savedUsuarios) : ["Usuário 1", "Usuário 2"];
-  });
-  
-  const [novoUsuario, setNovoUsuario] = useState("");
-  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
-  
-  const [cartoes, setCartoes] = useState(() => {
-    const savedCartoes = localStorage.getItem("cartoes");
-    return savedCartoes ? JSON.parse(savedCartoes) : ["Nubank", "Inter"];
-  });
-
-  const [mostrarModalCartoes, setMostrarModalCartoes] = useState(false);
-  const [novoCartao, setNovoCartao] = useState("");
-
+  // Form states
   const [form, setForm] = useState({
     id: null,
     data: "",
@@ -169,351 +166,51 @@ export default function App() {
     valor: "",
     quem: "",
     compartilhada: false,
-    divisao: [
-      { usuario: "", percentual: 100 }
-    ],
-    categoria: categorias[0]?.id || "", // Usar o ID da primeira categoria como padrão
+    divisao: [{ usuario: "", percentual: 100 }],
+    categoria: categorias[0]?.id || "",
     cartao: "",
     recorrente: false,
     frequencia: "mensal",
     diaVencimento: ""
   });
 
+  // Filter states
+  const [filtro, setFiltro] = useState("");
   const [filtroCartao, setFiltroCartao] = useState("");
+  const [ordenacao, setOrdenacao] = useState("data-desc");
+  const [mostrarFinalizadas, setMostrarFinalizadas] = useState(true);
 
+  // Modal states
+  const [mostrarModalUsuarios, setMostrarModalUsuarios] = useState(false);
+  const [mostrarModalCartoes, setMostrarModalCartoes] = useState(false);
   const [mostrarModalCategorias, setMostrarModalCategorias] = useState(false);
-  const [categoriaParaEditar, setCategoriaParaEditar] = useState({
-    nome: "",
-    icone: "mdi:folder",
-    cor: "#000000"
-  });
+  const [compraParaEditar, setCompraParaEditar] = useState(null);
+  const [categoriaParaEditar, setCategoriaParaEditar] = useState(null);
+  const [novoUsuario, setNovoUsuario] = useState("");
+  const [novoCartao, setNovoCartao] = useState("");
   const [novaSubcategoria, setNovaSubcategoria] = useState("");
 
-  const [configuracoes, setConfiguracoes] = useState(() => {
-    const savedConfig = localStorage.getItem("configuracoes");
-    return savedConfig ? JSON.parse(savedConfig) : {
-      tema: "claro",
-      notificacoes: true,
-      ultimoBackup: null
-    };
-  });
-
-  useEffect(() => {
-    const data = localStorage.getItem("compras");
-    if (data) setCompras(JSON.parse(data));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("compras", JSON.stringify(compras));
-  }, [compras]);
-  
-  useEffect(() => {
-    localStorage.setItem("usuarios", JSON.stringify(usuarios));
-  }, [usuarios]);
-
-  useEffect(() => {
-    localStorage.setItem("cartoes", JSON.stringify(cartoes));
-  }, [cartoes]);
-
-  useEffect(() => {
-    localStorage.setItem("categorias", JSON.stringify(categorias));
-    console.log("Categorias atualizadas:", categorias); // Para debug
-  }, [categorias]);
-
-  useEffect(() => {
-    localStorage.setItem("configuracoes", JSON.stringify(configuracoes));
-  }, [configuracoes]);
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    
-    if (name === "compartilhada") {
-      if (checked && !form.divisao.length) {
-        setForm({
-          ...form,
-          compartilhada: checked,
-          divisao: usuarios.map((usuario, index) => ({
-            usuario,
-            percentual: index === 0 ? 100 : 0
-          }))
-        });
-      } else {
-        setForm({ ...form, compartilhada: checked });
-      }
-    } else {
-      setForm({ ...form, [name]: type === "checkbox" ? checked : value });
-    }
-  };
-  
-  const handleDivisaoChange = (index, campo, valor) => {
-    const novasDivisoes = [...form.divisao];
-    novasDivisoes[index] = { ...novasDivisoes[index], [campo]: valor };
-    
-    if (campo === "percentual") {
-      const total = novasDivisoes.reduce((sum, item, idx) => 
-        idx === index ? sum + parseInt(valor || 0) : sum + parseInt(item.percentual || 0), 0);
-      
-      if (total > 100) {
-        const excesso = total - 100;
-        const outrosTotal = total - parseInt(valor || 0);
-        
-        if (outrosTotal > 0) {
-          novasDivisoes.forEach((item, idx) => {
-            if (idx !== index) {
-              const percentualAtual = parseInt(item.percentual || 0);
-              const reducao = Math.min(percentualAtual, Math.round((percentualAtual / outrosTotal) * excesso));
-              novasDivisoes[idx].percentual = Math.max(0, percentualAtual - reducao).toString();
-            }
-          });
-        } else {
-          novasDivisoes[index].percentual = "100";
-        }
-      }
-    }
-    
-    setForm({ ...form, divisao: novasDivisoes });
-  };
-  
-  const adicionarDivisao = () => {
-    const usuariosAtuais = form.divisao.map(d => d.usuario);
-    const usuarioDisponivel = usuarios.find(u => !usuariosAtuais.includes(u));
-    
-    if (usuarioDisponivel) {
-      const novasDivisoes = [...form.divisao, { usuario: usuarioDisponivel, percentual: 0 }];
-      setForm({ ...form, divisao: novasDivisoes });
-    }
-  };
-  
-  const removerDivisao = (index) => {
-    if (form.divisao.length > 1) {
-      const novasDivisoes = form.divisao.filter((_, idx) => idx !== index);
-      
-      const totalAtual = novasDivisoes.reduce((sum, item) => sum + parseInt(item.percentual || 0), 0);
-      if (totalAtual < 100 && novasDivisoes.length > 0) {
-        const diferenca = 100 - totalAtual;
-        novasDivisoes[0].percentual = (parseInt(novasDivisoes[0].percentual || 0) + diferenca).toString();
-      }
-      
-      setForm({ ...form, divisao: novasDivisoes });
-    }
+  // 3. Helper functions
+  const valorParcela = (valor, parcelas) => {
+    return (parseFloat(valor) / parseInt(parcelas)).toFixed(2);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    
-    try {
-      console.log('Form submetido:', form); // Debug
-      const formProcessado = { ...form };
-      console.log('Form processado:', formProcessado); // Debug
-      
-      if (!formProcessado.compartilhada) {
-        formProcessado.divisao = [{ usuario: formProcessado.quem, percentual: 100 }];
-      }
-      
-      // Validar categoria
-      if (!formProcessado.categoria) {
-        formProcessado.categoria = categorias[0]?.id || "";
-      }
-      
-      if (form.id) {
-        setCompras(compras.map(comp => comp.id === form.id ? { ...formProcessado } : comp));
-      } else {
-        const novaCompra = { 
-          ...formProcessado, 
-          id: Date.now().toString(), 
-          dataRegistro: new Date().toISOString() 
-        };
-        setCompras(prevCompras => [...prevCompras, novaCompra]);
-      }
-      
-      resetForm();
-      console.log('Compra salva com sucesso'); // Debug
-    } catch (error) {
-      console.error('Erro ao salvar compra:', error);
-      alert('Erro ao salvar a compra. Por favor, verifique os dados.');
-    }
-  };
-
-  const resetForm = () => {
-    setForm({
-      id: null,
-      data: "",
-      descricao: "",
-      parcelas: 1,
-      valor: "",
-      quem: "",
-      compartilhada: false,
-      divisao: [{ usuario: "", percentual: 100 }],
-      categoria: categorias[0]?.id || "", // Usar o ID da primeira categoria ao invés de "Outros"
-      cartao: "",
-      recorrente: false,
-      frequencia: "mensal",
-      diaVencimento: ""
-    });
-    setCompraParaEditar(null);
-  };
-
-  const editarCompra = (compra) => {
-    setCompraParaEditar(compra);
-    
-    const compraCompleta = {
-      ...compra,
-      compartilhada: compra.compartilhada || false,
-      divisao: compra.divisao || [{ usuario: compra.quem, percentual: 100 }]
-    };
-    
-    setForm(compraCompleta);
-  };
-
-  const excluirCompra = (id) => {
-    if (window.confirm("Tem certeza que deseja excluir esta compra?")) {
-      setCompras(compras.filter(c => c.id !== id));
-    }
-  };
-  
-  const adicionarUsuario = () => {
-    if (novoUsuario.trim() && !usuarios.includes(novoUsuario.trim())) {
-      setUsuarios([...usuarios, novoUsuario.trim()]);
-      setNovoUsuario("");
-    }
-  };
-  
-  const removerUsuario = (usuario) => {
-    if (usuarios.length > 2) {
-      if (window.confirm(`Tem certeza que deseja remover "${usuario}"?`)) {
-        setUsuarios(usuarios.filter(u => u !== usuario));
-        
-        setCompras(compras.map(compra => {
-          const novaCompra = { ...compra };
-          if (novaCompra.quem === usuario) {
-            const novoQuem = usuarios.find(u => u !== usuario);
-            novaCompra.quem = novoQuem || usuarios[0];
-          }
-          
-          if (novaCompra.divisao) {
-            novaCompra.divisao = novaCompra.divisao.map(div => {
-              if (div.usuario === usuario) {
-                return { ...div, usuario: usuarios.find(u => u !== usuario) || usuarios[0] };
-              }
-              return div;
-            });
-          }
-          
-          return novaCompra;
-        }));
-      }
-    } else {
-      alert("É necessário manter pelo menos dois usuários.");
-    }
-  };
-
-  const calcularParcelaAtual = (dataCompra, totalParcelas) => {
-    const hoje = new Date();
+  const parcelaNoMes = (dataCompra, totalParcelas, mesSelecionado, anoSelecionado) => {
     const compra = new Date(dataCompra);
-    const diffMeses = (hoje.getFullYear() - compra.getFullYear()) * 12 + 
-                       (hoje.getMonth() - compra.getMonth());
-    return Math.min(Math.max(1, diffMeses + 1), parseInt(totalParcelas));
+    const diffMeses = (anoSelecionado - compra.getFullYear()) * 12 + 
+                     (mesSelecionado - compra.getMonth());
+    const parcela = diffMeses + 1;
+    return parcela >= 1 && parcela <= parseInt(totalParcelas);
   };
 
   const calcularParcelaPorMes = (dataCompra, totalParcelas, mesSelecionado, anoSelecionado) => {
     const compra = new Date(dataCompra);
     const diffMeses = (anoSelecionado - compra.getFullYear()) * 12 + 
-                       (mesSelecionado - compra.getMonth());
+                     (mesSelecionado - compra.getMonth());
     return diffMeses + 1;
   };
 
-  const parcelaNoMes = (dataCompra, totalParcelas, mesSelecionado, anoSelecionado) => {
-    const parcela = calcularParcelaPorMes(dataCompra, totalParcelas, mesSelecionado, anoSelecionado);
-    return parcela >= 1 && parcela <= parseInt(totalParcelas);
-  };
-
-  const valorParcela = (valor, parcelas) => {
-    return (parseFloat(valor) / parseInt(parcelas)).toFixed(2);
-  };
-
-  const comprasFiltradas = compras
-    .filter(c => {
-      const temParcelaNesteMes = parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado);
-      
-      const atendeFiltroBusca = c.descricao.toLowerCase().includes(filtro.toLowerCase()) || 
-                                (c.quem && c.quem.toLowerCase().includes(filtro.toLowerCase())) ||
-                                (c.divisao && c.divisao.some(d => d.usuario.toLowerCase().includes(filtro.toLowerCase())));
-      
-      const atendeCartao = !filtroCartao || c.cartao === filtroCartao;
-      
-      return (mostrarFinalizadas || temParcelaNesteMes) && atendeFiltroBusca && atendeCartao;
-    })
-    .sort((a, b) => {
-      switch (ordenacao) {
-        case "data-asc":
-          return new Date(a.data) - new Date(b.data);
-        case "data-desc":
-          return new Date(b.data) - new Date(a.data);
-        case "valor-asc":
-          return parseFloat(a.valor) - parseFloat(b.valor);
-        case "valor-desc":
-          return parseFloat(b.valor) - parseFloat(a.valor);
-        default:
-          return new Date(b.data) - new Date(a.data);
-      }
-    });
-
-  const calcularTotais = () => {
-    const totaisPorUsuario = {};
-    usuarios.forEach(usuario => {
-      totaisPorUsuario[usuario] = 0;
-    });
-    
-    let totalGeral = 0;
-    
-    compras.forEach(compra => {
-      if (!compra.data || !compra.valor || !compra.parcelas) return;
-      
-      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
-        const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
-        
-        if (compra.compartilhada && compra.divisao && compra.divisao.length > 0) {
-          compra.divisao.forEach(div => {
-            const percentual = parseInt(div.percentual || 0) / 100;
-            const valorUsuario = valorParcelaAtual * percentual;
-            
-            if (totaisPorUsuario[div.usuario] !== undefined) {
-              totaisPorUsuario[div.usuario] += valorUsuario;
-            } else {
-              if (totaisPorUsuario[compra.quem] !== undefined) {
-                totaisPorUsuario[compra.quem] += valorUsuario;
-              }
-            }
-          });
-        } else if (totaisPorUsuario[compra.quem] !== undefined) {
-          totaisPorUsuario[compra.quem] += valorParcelaAtual;
-        }
-        
-        totalGeral += valorParcelaAtual;
-      }
-    });
-    
-    return { totaisPorUsuario, totalGeral };
-  };
-
-  const calcularTotaisPorCartao = () => {
-    const totais = {};
-    cartoes.forEach(cartao => {
-      totais[cartao] = 0;
-    });
-
-    compras.forEach(compra => {
-      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
-        const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
-        if (totais[compra.cartao] !== undefined) {
-          totais[compra.cartao] += valorParcelaAtual;
-        }
-      }
-    });
-
-    return totais;
-  };
-
+  // 4. Funções que dependem dos estados
   const prepararDadosGraficos = () => {
     const dadosCategorias = {};
     const dadosUsuarios = {};
@@ -533,35 +230,32 @@ export default function App() {
 
     compras.forEach(compra => {
       if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
-        const valorParcela = parseFloat(valorParcela(compra.valor, compra.parcelas));
+        const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
         
-        // Adicionar ao total da categoria
-        const categoriaId = compra.categoria.split(':')[0]; // Pega o ID da categoria mesmo se for subcategoria
+        const categoriaId = compra.categoria.split(':')[0];
         if (dadosCategorias[categoriaId]) {
-          dadosCategorias[categoriaId].value += valorParcela;
+          dadosCategorias[categoriaId].value += valorParcelaAtual;
         }
 
-        // Resto do código para usuários e cartões permanece o mesmo
         if (dadosCartoes[compra.cartao] !== undefined) {
-          dadosCartoes[compra.cartao] += valorParcela;
+          dadosCartoes[compra.cartao] += valorParcelaAtual;
         }
 
         if (compra.compartilhada && compra.divisao) {
           compra.divisao.forEach(div => {
             const percentual = parseInt(div.percentual || 0) / 100;
             if (dadosUsuarios[div.usuario] !== undefined) {
-              dadosUsuarios[div.usuario] += valorParcela * percentual;
+              dadosUsuarios[div.usuario] += valorParcelaAtual * percentual;
             }
           });
         } else if (dadosUsuarios[compra.quem] !== undefined) {
-          dadosUsuarios[compra.quem] += valorParcela;
+          dadosUsuarios[compra.quem] += valorParcelaAtual;
         }
       }
     });
 
     return {
-      categorias: Object.values(dadosCategorias)
-        .filter(item => item.value > 0),
+      categorias: Object.values(dadosCategorias).filter(item => item.value > 0),
       usuarios: Object.entries(dadosUsuarios)
         .map(([name, value]) => ({ name, value }))
         .filter(item => item.value > 0),
@@ -571,973 +265,761 @@ export default function App() {
     };
   };
 
-  const backupAutomatico = () => {
-    const dados = {
-      compras,
-      usuarios,
-      cartoes,
-      categorias,
-      configuracoes: {
-        ...configuracoes,
-        ultimoBackup: new Date().toISOString()
-      }
+  const calcularTotais = () => {
+    const totais = {
+      totaisPorUsuario: {},
+      totalGeral: 0
     };
-    
-    const backupKey = 'backup_' + new Date().toISOString();
-    localStorage.setItem(backupKey, JSON.stringify(dados));
-    
-    // Atualiza a data do último backup
-    setConfiguracoes(prev => ({
-      ...prev,
-      ultimoBackup: new Date().toISOString()
-    }));
 
-    return backupKey; // Retorna a chave do backup para possível uso posterior
+    usuarios.forEach(usuario => {
+      totais.totaisPorUsuario[usuario] = 0;
+    });
+
+    compras.forEach(compra => {
+      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
+        const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
+
+        if (compra.compartilhada && compra.divisao) {
+          compra.divisao.forEach(div => {
+            const percentual = parseInt(div.percentual || 0) / 100;
+            if (totais.totaisPorUsuario[div.usuario] !== undefined) {
+              totais.totaisPorUsuario[div.usuario] += valorParcelaAtual * percentual;
+            }
+          });
+        } else if (totais.totaisPorUsuario[compra.quem] !== undefined) {
+          totais.totaisPorUsuario[compra.quem] += valorParcelaAtual;
+        }
+      }
+    });
+
+    totais.totalGeral = Object.values(totais.totaisPorUsuario).reduce((a, b) => a + b, 0);
+    return totais;
   };
 
-  const gerenciarCategorias = {
-    adicionar: (novaCategoria) => {
-      if (novaCategoria?.nome?.trim()) {
-        const novaListaCategorias = [...categorias, {
-          id: Date.now().toString(),
-          nome: novaCategoria.nome.trim(),
-          icone: novaCategoria.icone || "mdi:folder",
-          cor: novaCategoria.cor || "#000000",
-          subcategorias: []
-        }];
-        setCategorias(novaListaCategorias);
-        localStorage.setItem("categorias", JSON.stringify(novaListaCategorias));
+  // 5. Form handlers
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    try {
+      if (!form.data || !form.descricao || !form.valor || !form.quem || !form.cartao || !form.categoria) {
+        alert('Por favor, preencha todos os campos obrigatórios');
+        return;
       }
-    },
 
-    editar: (id, dadosAtualizados) => {
-      setCategorias(categorias.map(cat => 
-        cat.id === id ? { ...cat, ...dadosAtualizados } : cat
-      ));
-    },
+      const novaCompra = {
+        ...form,
+        id: form.id || Date.now().toString(),
+        valor: parseFloat(form.valor),
+        parcelas: parseInt(form.parcelas) || 1,
+        dataRegistro: new Date().toISOString()
+      };
 
-    remover: (id) => {
-      if (window.confirm("Tem certeza? Isso afetará todas as compras desta categoria.")) {
-        setCategorias(categorias.filter(cat => cat.id !== id));
-        // Atualizar compras que usam esta categoria
-        setCompras(compras.map(compra => ({
-          ...compra,
-          categoria: compra.categoria === id ? "Outros" : compra.categoria
-        })));
-      }
-    },
+      setCompras(prevCompras => {
+        const novasCompras = form.id 
+          ? prevCompras.map(c => c.id === form.id ? novaCompra : c)
+          : [...prevCompras, novaCompra];
+        localStorage.setItem('compras', JSON.stringify(novasCompras));
+        return novasCompras;
+      });
 
-    adicionarSubcategoria: (categoriaId, subcategoria) => {
-      setCategorias(categorias.map(cat => 
-        cat.id === categoriaId ? 
-        { ...cat, subcategorias: [...cat.subcategorias, subcategoria] } : 
-        cat
-      ));
-    },
-
-    removerSubcategoria: (categoriaId, subcategoria) => {
-      setCategorias(categorias.map(cat => 
-        cat.id === categoriaId ? 
-        { ...cat, subcategorias: cat.subcategorias.filter(sub => sub !== subcategoria) } : 
-        cat
-      ));
+      setForm({
+        id: null,
+        data: "",
+        descricao: "",
+        parcelas: 1,
+        valor: "",
+        quem: "",
+        compartilhada: false,
+        divisao: [{ usuario: "", percentual: 100 }],
+        categoria: categorias[0]?.id || "",
+        cartao: "",
+        recorrente: false,
+        frequencia: "mensal",
+        diaVencimento: ""
+      });
+      
+    } catch (error) {
+      console.error('Erro ao salvar compra:', error);
+      alert('Erro ao salvar a compra. Por favor, verifique os dados.');
     }
   };
 
-  const fecharModalCategorias = () => {
-    setMostrarModalCategorias(false);
-    setCategoriaParaEditar({
-      nome: "",
-      icone: "mdi:folder",
-      cor: "#000000"
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setForm(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const handleDivisaoChange = (index, field, value) => {
+    setForm(prev => {
+      const newDivisao = [...prev.divisao];
+      newDivisao[index] = {
+        ...newDivisao[index],
+        [field]: value
+      };
+      return {
+        ...prev,
+        divisao: newDivisao
+      };
     });
   };
 
-  const { totaisPorUsuario, totalGeral } = calcularTotais();
-  const totaisPorCartao = calcularTotaisPorCartao();
-  const dadosGraficos = prepararDadosGraficos();
-
-  // Adicionar após o cálculo dos totais
-  const dados = prepararDadosGraficos();
-
-  const mudarMes = (delta) => {
-    let novoMes = mesSelecionado + delta;
-    let novoAno = anoSelecionado;
-    
-    if (novoMes > 11) {
-      novoMes = 0;
-      novoAno += 1;
-    } else if (novoMes < 0) {
-      novoMes = 11;
-      novoAno -= 1;
-    }
-    
-    setMesSelecionado(novoMes);
-    setAnoSelecionado(novoAno);
+  const handleAdicionarDivisao = () => {
+    setForm(prev => ({
+      ...prev,
+      divisao: [...prev.divisao, { usuario: "", percentual: 0 }]
+    }));
   };
 
-  const nomesMeses = [
-    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
-  ];
-  
-  const coresUsuarios = {
-    [usuarios[0]]: "bg-blue-500 text-white",
-    [usuarios[1]]: "bg-green-500 text-white",
-  };
-  
-  usuarios.slice(2).forEach((usuario, index) => {
-    const cores = [
-      "bg-purple-500 text-white",
-      "bg-yellow-500 text-black",
-      "bg-red-500 text-white",
-      "bg-indigo-500 text-white",
-      "bg-pink-500 text-white",
-      "bg-teal-500 text-white"
-    ];
-    coresUsuarios[usuario] = cores[index % cores.length];
-  });
-
-  const editarNomeUsuario = (usuarioAntigo, novoNome) => {
-    if (novoNome.trim() && novoNome !== usuarioAntigo) {
-      const novoUsuarios = usuarios.map(u => 
-        u === usuarioAntigo ? novoNome : u
-      );
-      
-      const novasCompras = compras.map(compra => {
-        const novaCompra = { ...compra };
-        if (novaCompra.quem === usuarioAntigo) {
-          novaCompra.quem = novoNome;
-        }
-        if (novaCompra.divisao) {
-          novaCompra.divisao = novaCompra.divisao.map(div => ({
-            ...div,
-            usuario: div.usuario === usuarioAntigo ? novoNome : div.usuario
-          }));
-        }
-        return novaCompra;
-      });
-      
-      setUsuarios(novoUsuarios);
-      setCompras(novasCompras);
-    }
+  const handleRemoverDivisao = (index) => {
+    setForm(prev => ({
+      ...prev,
+      divisao: prev.divisao.filter((_, i) => i !== index)
+    }));
   };
 
-  const gerenciarCartoes = {
-    adicionar: (novoCartao) => {
-      if (novoCartao.trim() && !cartoes.includes(novoCartao)) {
-        setCartoes([...cartoes, novoCartao]);
-      }
-    },
-    
-    remover: (cartao) => {
-      if (cartoes.length > 1) {
-        if (window.confirm(`Tem certeza que deseja remover o cartão "${cartao}"?`)) {
-          setCartoes(cartoes.filter(c => c !== cartao));
-          setCompras(compras.map(compra => ({
-            ...compra,
-            cartao: compra.cartao === cartao ? cartoes[0] : compra.cartao
-          })));
-        }
-      } else {
-        alert("É necessário manter pelo menos um cartão.");
-      }
-    },
-    
-    editar: (cartaoAntigo, novoNome) => {
-      if (novoNome.trim() && novoNome !== cartaoAntigo) {
-        const novosCartoes = cartoes.map(c => 
-          c === cartaoAntigo ? novoNome : c
-        );
-        
-        const novasCompras = compras.map(compra => ({
-          ...compra,
-          cartao: compra.cartao === cartaoAntigo ? novoNome : compra.cartao
-        }));
-        
-        setCartoes(novosCartoes);
-        setCompras(novasCompras);
-      }
-    }
-  };
+  // 6. Effects
+  useEffect(() => {
+    const data = localStorage.getItem("compras");
+    if (data) setCompras(JSON.parse(data));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem("compras", JSON.stringify(compras));
+  }, [compras]);
+
+  useEffect(() => {
+    localStorage.setItem("usuarios", JSON.stringify(usuarios));
+  }, [usuarios]);
+
+  useEffect(() => {
+    localStorage.setItem("cartoes", JSON.stringify(cartoes));
+  }, [cartoes]);
+
+  useEffect(() => {
+    localStorage.setItem("categorias", JSON.stringify(categorias));
+  }, [categorias]);
+
+  // ...resto do seu componente...
 
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-blue-700">Controle de Cartão Compartilhado</h1>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setMostrarModalUsuarios(true)}
-              className="bg-blue-600 text-white py-1 px-3 rounded hover:bg-blue-700 text-sm"
-            >
-              Gerenciar Usuários
-            </button>
-            <button
-              onClick={() => setMostrarModalCartoes(true)}
-              className="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700 text-sm"
-            >
-              Gerenciar Cartões
-            </button>
-            <button
-              onClick={() => setMostrarModalCategorias(true)}
-              className="bg-purple-600 text-white py-1 px-3 rounded hover:bg-purple-700 text-sm"
-            >
-              Gerenciar Categorias
-            </button>
-          </div>
-        </div>
-        
-        {mostrarModalUsuarios && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-xl font-semibold mb-4">Gerenciar Usuários</h2>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Adicionar Novo Usuário</label>
-                <div className="flex">
-                  <input 
-                    type="text" 
-                    value={novoUsuario} 
-                    onChange={(e) => setNovoUsuario(e.target.value)} 
-                    placeholder="Nome do usuário" 
-                    className="flex-1 p-2 border border-gray-300 rounded-l"
-                  />
-                  <button 
-                    onClick={adicionarUsuario}
-                    className="bg-blue-600 text-white py-2 px-4 rounded-r hover:bg-blue-700"
-                  >
-                    Adicionar
-                  </button>
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <h3 className="text-lg font-medium mb-2">Usuários Atuais</h3>
-                <ul className="divide-y divide-gray-200">
-                  {usuarios.map((usuario, index) => (
-                    <li key={index} className="py-2 flex justify-between items-center">
-                      <span className={`px-2 py-1 rounded ${coresUsuarios[usuario]}`}>{usuario}</span>
-                      <button 
-                        onClick={() => removerUsuario(usuario)}
-                        className="text-red-500 hover:text-red-700"
-                        disabled={usuarios.length <= 2}
-                      >
-                        Remover
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div className="flex justify-end">
-                <button 
-                  onClick={() => setMostrarModalUsuarios(false)}
-                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {mostrarModalCartoes && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-md w-full">
-              <h2 className="text-xl font-semibold mb-4">Gerenciar Cartões</h2>
-              
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Adicionar Novo Cartão
-                </label>
-                <div className="flex">
-                  <input 
-                    type="text" 
-                    value={novoCartao} 
-                    onChange={(e) => setNovoCartao(e.target.value)} 
-                    placeholder="Nome do cartão" 
-                    className="flex-1 p-2 border border-gray-300 rounded-l"
-                  />
-                  <button 
-                    onClick={() => {
-                      if (novoCartao.trim()) {
-                        gerenciarCartoes.adicionar(novoCartao);
-                        setNovoCartao("");
-                      }
-                    }}
-                    className="bg-blue-600 text-white py-2 px-4 rounded-r hover:bg-blue-700"
-                  >
-                    Adicionar
-                  </button>
-                </div>
-              </div>
-              
-              <div className="mb-4">
-                <h3 className="text-lg font-medium mb-2">Cartões Cadastrados</h3>
-                <ul className="divide-y divide-gray-200">
-                  {cartoes.map((cartao, index) => (
-                    <li key={index} className="py-2 flex justify-between items-center">
-                      <span className="px-2 py-1 bg-gray-100 rounded">{cartao}</span>
-                      <div className="flex space-x-2">
-                        <button 
-                          onClick={() => {
-                            const novoNome = prompt(`Digite o novo nome para o cartão "${cartao}":`, cartao);
-                            if (novoNome) {
-                              gerenciarCartoes.editar(cartao, novoNome);
-                            }
-                          }}
-                          className="text-blue-500 hover:text-blue-700"
-                        >
-                          Editar
-                        </button>
-                        <button 
-                          onClick={() => gerenciarCartoes.remover(cartao)}
-                          className="text-red-500 hover:text-red-700"
-                          disabled={cartoes.length <= 1}
-                        >
-                          Remover
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              
-              <div className="flex justify-end">
-                <button 
-                  onClick={() => setMostrarModalCartoes(false)}
-                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {mostrarModalCategorias && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
-              <h2 className="text-xl font-semibold mb-4">Gerenciar Categorias</h2>
-              
-              <div className="overflow-y-auto flex-1"> {/* Container com scroll */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-medium mb-2">Nova Categoria</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <input
-                      type="text"
-                      placeholder="Nome da categoria"
-                      value={categoriaParaEditar?.nome || ""}
-                      onChange={(e) => setCategoriaParaEditar(prev => ({
-                        ...prev,
-                        nome: e.target.value
-                      }))}
-                      className="p-2 border border-gray-300 rounded"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Ícone (ex: mdi:food)"
-                      value={categoriaParaEditar?.icone || ""}
-                      onChange={(e) => setCategoriaParaEditar(prev => ({
-                        ...prev,
-                        icone: e.target.value
-                      }))}
-                      className="p-2 border border-gray-300 rounded"
-                    />
-                    <input
-                      type="color"
-                      value={categoriaParaEditar?.cor || "#000000"}
-                      onChange={(e) => setCategoriaParaEditar(prev => ({
-                        ...prev,
-                        cor: e.target.value
-                      }))}
-                      className="p-2 border border-gray-300 rounded"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {categorias.map((categoria) => (
-                    <div key={categoria.id} className="border p-4 rounded">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center space-x-2">
-                          <Icon icon={categoria.icone} style={{ color: categoria.cor }} />
-                          <span className="font-medium">{categoria.nome}</span>
-                        </div>
-                        <div className="space-x-2">
-                          <button
-                            onClick={() => setCategoriaParaEditar(categoria)}
-                            className="text-blue-500 hover:text-blue-700"
-                          >
-                            Editar
-                          </button>
-                          <button
-                            onClick={() => gerenciarCategorias.remover(categoria.id)}
-                            className="text-red-500 hover:text-red-700"
-                          >
-                            Remover
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="pl-6">
-                        <h4 className="text-sm font-medium mb-1">Subcategorias:</h4>
-                        <div className="flex flex-wrap gap-2">
-                          {categoria.subcategorias.map((sub, index) => (
-                            <span
-                              key={index}
-                              className="inline-flex items-center bg-gray-100 px-2 py-1 rounded text-sm"
-                            >
-                              {sub}
-                              <button
-                                onClick={() => gerenciarCategorias.removerSubcategoria(categoria.id, sub)}
-                                className="ml-1 text-gray-500 hover:text-red-500"
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                          <div className="flex items-center space-x-1">
-                            <input
-                              type="text"
-                              value={novaSubcategoria}
-                              onChange={(e) => setNovaSubcategoria(e.target.value)}
-                              placeholder="Nova subcategoria"
-                              className="p-1 text-sm border border-gray-300 rounded"
-                            />
-                            <button
-                              onClick={() => {
-                                if (novaSubcategoria.trim()) {
-                                  gerenciarCategorias.adicionarSubcategoria(categoria.id, novaSubcategoria.trim());
-                                  setNovaSubcategoria("");
-                                }
-                              }}
-                              className="text-blue-500 hover:text-blue-700"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end mt-4 pt-4 border-t">
-                <button
-                  onClick={fecharModalCategorias}
-                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-                >
-                  Fechar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-        
-        <div className="flex justify-center items-center mb-6">
-          <button 
-            onClick={() => mudarMes(-1)} 
-            className="bg-blue-500 text-white px-4 py-2 rounded-l hover:bg-blue-600"
+    <div className="container mx-auto px-4 py-8">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-blue-700">Controle de Cartão Compartilhado</h1>
+        <div className="flex space-x-2">
+          <button
+            onClick={() => setMostrarModalUsuarios(true)}
+            className="bg-blue-600 text-white py-1 px-3 rounded hover:bg-blue-700 text-sm"
           >
-            &#8592; Mês Anterior
+            Gerenciar Usuários
           </button>
-          <div className="bg-gray-100 px-6 py-2 font-semibold">
-            {nomesMeses[mesSelecionado]} / {anoSelecionado}
-            {(mesSelecionado === hoje.getMonth() && anoSelecionado === hoje.getFullYear()) && 
-              <span className="ml-2 text-sm bg-green-500 text-white px-2 py-1 rounded">Atual</span>
-            }
-          </div>
-          <button 
-            onClick={() => mudarMes(1)} 
-            className="bg-blue-500 text-white px-4 py-2 rounded-r hover:bg-blue-600"
+          <button
+            onClick={() => setMostrarModalCartoes(true)}
+            className="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700 text-sm"
           >
-            Próximo Mês &#8594;
+            Gerenciar Cartões
+          </button>
+          <button
+            onClick={() => setMostrarModalCategorias(true)}
+            className="bg-purple-600 text-white py-1 px-3 rounded hover:bg-purple-700 text-sm"
+          >
+            Gerenciar Categorias
           </button>
         </div>
+      </div>
+
+      {/* Filtros e Controles */}
+      <div className="mb-4 flex flex-col md:flex-row gap-4">
+        <div className="flex-1">
+          <input
+            type="text"
+            placeholder="Filtrar por descrição ou pessoa..."
+            value={filtro}
+            onChange={(e) => setFiltro(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded"
+          />
+        </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-          {usuarios.map((usuario, index) => (
-            <div key={index} className={`p-4 rounded-lg shadow text-center ${index % 2 === 0 ? 'bg-blue-50' : 'bg-green-50'}`}>
-              <h3 className="font-semibold text-lg">Total {usuario}</h3>
-              <p className={`text-2xl font-bold ${index % 2 === 0 ? 'text-blue-600' : 'text-green-600'}`}>
-                R${totaisPorUsuario[usuario].toFixed(2)}
-              </p>
-            </div>
-          ))}
-          <div className="bg-purple-50 p-4 rounded-lg shadow text-center">
-            <h3 className="font-semibold text-lg">Total Geral</h3>
-            <p className="text-2xl font-bold text-purple-600">R${totalGeral.toFixed(2)}</p>
-          </div>
+        <div className="w-48">
+          <select
+            value={filtroCartao}
+            onChange={(e) => setFiltroCartao(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded"
+          >
+            <option value="">Todos os cartões</option>
+            {cartoes.map((cartao, index) => (
+              <option key={index} value={cartao}>{cartao}</option>
+            ))}
+          </select>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-          {cartoes.map((cartao, index) => (
-            <div key={index} className="p-4 rounded-lg shadow text-center bg-gray-50">
-              <h3 className="font-semibold text-lg">Total {cartao}</h3>
-              <p className="text-2xl font-bold text-gray-600">R${totaisPorCartao[cartao].toFixed(2)}</p>
-            </div>
-          ))}
+        <div className="flex flex-row gap-2">
+          <select
+            value={`${mesSelecionado}-${anoSelecionado}`}
+            onChange={(e) => {
+              const [mes, ano] = e.target.value.split('-');
+              setMesSelecionado(parseInt(mes));
+              setAnoSelecionado(parseInt(ano));
+            }}
+            className="p-2 border border-gray-300 rounded"
+          >
+            {Array.from({ length: 24 }, (_, i) => {
+              const data = new Date();
+              data.setMonth(data.getMonth() - 12 + i);
+              return {
+                value: `${data.getMonth()}-${data.getFullYear()}`,
+                label: `${nomesMeses[data.getMonth()]} ${data.getFullYear()}`
+              };
+            }).map(({ value, label }) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Gráfico de Categorias */}
-          <div className="bg-white p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Gastos por Categoria</h3>
-            <div className="h-64">
-              <PieChart width={300} height={250}>
-                <Pie
-                  data={dadosGraficos.categorias}
-                  cx={150}
-                  cy={125}
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {dadosGraficos.categorias.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.cor} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value) => `R$ ${value.toFixed(2)}`}
-                />
-                <Legend />
-              </PieChart>
-            </div>
-          </div>
-
-          {/* Gráfico de Usuários */}
-          <div className="bg-white p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Gastos por Usuário</h3>
-            <div className="h-64">
-              <BarChart
-                width={300}
-                height={250}
-                data={dadosGraficos.usuarios}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
-                <Bar dataKey="value" fill="#8884d8">
-                  {dadosGraficos.usuarios.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </div>
-          </div>
-
-          {/* Gráfico de Cartões */}
-          <div className="bg-white p-4 rounded-lg shadow">
-            <h3 className="text-lg font-semibold mb-4">Gastos por Cartão</h3>
-            <div className="h-64">
-              <BarChart
-                width={300}
-                height={250}
-                data={dadosGraficos.cartoes}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip formatter={(value) => `R$ ${value.toFixed(2)}`} />
-                <Bar dataKey="value" fill="#82ca9d">
-                  {dadosGraficos.cartoes.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </div>
-          </div>
+      {/* Totais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow">
+          <h3 className="text-lg font-medium mb-2">Total do Mês</h3>
+          <p className="text-2xl font-bold text-blue-600">
+            R$ {calcularTotais().totalGeral.toFixed(2)}
+          </p>
         </div>
-
-        <form onSubmit={handleSubmit} className="bg-gray-50 p-4 rounded-lg shadow mb-6">
-          <h2 className="text-xl font-semibold mb-4">
-            {compraParaEditar ? "Editar Compra" : "Adicionar Nova Compra"}
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Data</label>
-              <input 
-                type="date" 
-                name="data" 
-                value={form.data} 
-                onChange={handleChange} 
-                required 
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
-              <input 
-                type="text" 
-                name="descricao" 
-                placeholder="Ex: Mercado, Netflix, etc." 
-                value={form.descricao} 
-                onChange={handleChange} 
-                required 
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Parcelas</label>
-              <input 
-                type="number" 
-                min="1"
-                name="parcelas" 
-                placeholder="Número de parcelas" 
-                value={form.parcelas} 
-                onChange={handleChange} 
-                required 
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Valor Total (R$)</label>
-              <input 
-                type="number" 
-                step="0.01"
-                min="0.01"
-                name="valor" 
-                placeholder="Valor total da compra" 
-                value={form.valor} 
-                onChange={handleChange} 
-                required 
-                className="w-full p-2 border border-gray-300 rounded"
-              />
-            </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Quem Pagou</label>
-              <select 
-                name="quem" 
-                value={form.quem} 
-                onChange={handleChange} 
-                required 
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                <option value="">Selecione</option>
-                {usuarios.map((usuario, index) => (
-                  <option key={index} value={usuario}>{usuario}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center py-2">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="compartilhada"
-                  checked={form.compartilhada}
-                  onChange={handleChange}
-                  className="form-checkbox h-5 w-5 text-blue-600"
-                />
-                <span className="ml-2 text-gray-700">Compra compartilhada</span>
-              </label>
-            </div>
+        
+        {usuarios.map((usuario, index) => (
+          <div key={index} className="bg-white p-4 rounded-lg shadow">
+            <h3 className="text-lg font-medium mb-2">{usuario}</h3>
+            <p className="text-2xl font-bold text-blue-600">
+              R$ {calcularTotais().totaisPorUsuario[usuario]?.toFixed(2) || "0.00"}
+            </p>
           </div>
+        ))}
+      </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
-              <select
-                name="categoria"
-                value={form.categoria}
-                onChange={handleChange}
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                {categorias.map((cat) => (
-                  <optgroup key={cat.id} label={cat.nome}>
-                    <option value={cat.id}>{cat.nome}</option>
-                    {cat.subcategorias.map((sub, index) => (
-                      <option key={index} value={`${cat.id}:${sub}`}>{sub}</option>
-                    ))}
-                  </optgroup>
-                ))}
-              </select>
-            </div>
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        {/* Gráficos aqui */}
+      </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Cartão</label>
-              <select
-                name="cartao"
-                value={form.cartao}
-                onChange={handleChange}
-                required
-                className="w-full p-2 border border-gray-300 rounded"
-              >
-                <option value="">Selecione o cartão</option>
-                {cartoes.map((cartao, index) => (
-                  <option key={index} value={cartao}>{cartao}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex items-center">
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="recorrente"
-                  checked={form.recorrente}
-                  onChange={handleChange}
-                  className="form-checkbox h-5 w-5 text-blue-600"
-                />
-                <span className="ml-2 text-gray-700">Despesa Recorrente</span>
-              </label>
-            </div>
-          </div>
-
-          {form.recorrente && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 p-4 bg-blue-50 rounded">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Frequência</label>
-                <select
-                  name="frequencia"
-                  value={form.frequencia}
-                  onChange={handleChange}
-                  className="w-full p-2 border border-gray-300 rounded"
-                >
-                  <option value="mensal">Mensal</option>
-                  <option value="anual">Anual</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Dia do Vencimento</label>
-                <input
-                  type="number"
-                  name="diaVencimento"
-                  min="1"
-                  max="31"
-                  value={form.diaVencimento}
-                  onChange={handleChange}
-                  className="w-full p-2 border border-gray-300 rounded"
-                  placeholder="Dia do mês"
-                />
-              </div>
-            </div>
-          )}
-          
-          {form.compartilhada && (
-            <div className="mt-4 p-4 bg-blue-50 rounded-lg">
-              <div className="flex justify-between items-center mb-2">
-                <h3 className="font-medium">Divisão da Compra</h3>
-                <button 
-                  type="button"
-                  onClick={adicionarDivisao}
-                  disabled={form.divisao.length >= usuarios.length}
-                  className={`text-sm ${form.divisao.length >= usuarios.length ? 'text-gray-400' : 'text-blue-600 hover:text-blue-800'}`}
-                >
-                  + Adicionar Usuário
-                </button>
-              </div>
-              
-              <div className="space-y-2">
-                {form.divisao.map((div, index) => (
-                  <div key={index} className="flex items-center space-x-2 p-2 bg-white rounded">
-                    <select
-                      value={div.usuario}
-                      onChange={(e) => handleDivisaoChange(index, "usuario", e.target.value)}
-                      className="flex-1 p-2 border border-gray-300 rounded"
-                    >
-                      <option value="">Selecione um usuário</option>
-                      {usuarios.map((usuario, i) => (
-                        <option 
-                          key={i} 
-                          value={usuario}
-                          disabled={form.divisao.some((d, idx) => idx !== index && d.usuario === usuario)}
-                        >
-                          {usuario}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    <div className="flex items-center space-x-1">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={div.percentual}
-                        onChange={(e) => handleDivisaoChange(index, "percentual", e.target.value)}
-                        className="w-16 p-2 border border-gray-300 rounded"
-                      />
-                      <span>%</span>
-                    </div>
-                    
-                    {form.divisao.length > 1 && (
-                      <button 
-                        type="button"
-                        onClick={() => removerDivisao(index)}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        &times;
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-2 text-sm text-gray-600">
-                Total: {form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0)}%
-                {form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0) !== 100 && (
-                  <span className="text-red-500 ml-2">Deve totalizar 100%</span>
-                )}
-              </div>
-            </div>
-          )}
-          
-          <div className="flex justify-end mt-4 space-x-2">
-            {compraParaEditar && (
-              <button 
-                type="button" 
-                onClick={resetForm}
-                className="bg-gray-300 text-gray-700 py-2 px-4 rounded"
-              >
-                Cancelar
-              </button>
-            )}
-            <button 
-              type="submit" 
-              className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
-              disabled={form.compartilhada && form.divisao.reduce((total, div) => total + parseInt(div.percentual || 0), 0) !== 100}
-            >
-              {compraParaEditar ? "Atualizar" : "Adicionar"}
-            </button>
-          </div>
-        </form>
-
-        <div className="mb-4 flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
+      {/* Formulário de Nova Compra */}
+      <form onSubmit={handleSubmit} className="mb-8 bg-white p-6 rounded-lg shadow">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Data</label>
             <input
-              type="text"
-              placeholder="Filtrar por descrição ou pessoa..."
-              value={filtro}
-              onChange={(e) => setFiltro(e.target.value)}
+              type="date"
+              name="data"
+              value={form.data}
+              onChange={handleChange}
               className="w-full p-2 border border-gray-300 rounded"
             />
           </div>
-          
-          <div className="w-48">
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Descrição</label>
+            <input
+              type="text"
+              name="descricao"
+              value={form.descricao}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Valor</label>
+            <input
+              type="number"
+              name="valor"
+              value={form.valor}
+              onChange={handleChange}
+              step="0.01"
+              className="w-full p-2 border border-gray-300 rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Categoria</label>
             <select
-              value={filtroCartao}
-              onChange={(e) => setFiltroCartao(e.target.value)}
+              name="categoria"
+              value={form.categoria}
+              onChange={handleChange}
               className="w-full p-2 border border-gray-300 rounded"
             >
-              <option value="">Todos os cartões</option>
+              <option value="">Selecione...</option>
+              {categorias.map((cat) => (
+                <optgroup key={cat.id} label={cat.nome}>
+                  <option value={cat.id}>{cat.nome}</option>
+                  {cat.subcategorias.map((sub, index) => (
+                    <option key={`${cat.id}-${index}`} value={`${cat.id}:${sub}`}>
+                      {sub}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Cartão</label>
+            <select
+              name="cartao"
+              value={form.cartao}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded"
+            >
+              <option value="">Selecione...</option>
               {cartoes.map((cartao, index) => (
                 <option key={index} value={cartao}>{cartao}</option>
               ))}
             </select>
           </div>
 
-          <div className="flex flex-row gap-2">
+          <div>
+            <label className="block text-sm font-medium mb-1">Parcelas</label>
+            <input
+              type="number"
+              name="parcelas"
+              value={form.parcelas}
+              onChange={handleChange}
+              min="1"
+              className="w-full p-2 border border-gray-300 rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Quem comprou</label>
             <select
-              value={ordenacao}
-              onChange={(e) => setOrdenacao(e.target.value)}
-              className="p-2 border border-gray-300 rounded"
+              name="quem"
+              value={form.quem}
+              onChange={handleChange}
+              className="w-full p-2 border border-gray-300 rounded"
             >
-              <option value="data-desc">Data (mais recente)</option>
-              <option value="data-asc">Data (mais antiga)</option>
-              <option value="valor-desc">Valor (maior)</option>
-              <option value="valor-asc">Valor (menor)</option>
+              <option value="">Selecione...</option>
+              {usuarios.map((usuario, index) => (
+                <option key={index} value={usuario}>{usuario}</option>
+              ))}
             </select>
-            
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={mostrarFinalizadas}
-                onChange={() => setMostrarFinalizadas(!mostrarFinalizadas)}
-                className="mr-2"
-              />
-              Mostrar todas
-            </label>
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          {comprasFiltradas.length > 0 ? (
-            <table className="min-w-full bg-white border border-gray-200 rounded shadow">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="py-2 px-4 border-b text-left">Data</th>
-                  <th className="py-2 px-4 border-b text-left">Descrição</th>
-                  <th className="py-2 px-4 border-b text-left">Valor Total</th>
-                  <th className="py-2 px-4 border-b text-left">Parcela</th>
-                  <th className="py-2 px-4 border-b text-left">Valor/Mês</th>
-                  <th className="py-2 px-4 border-b text-left">Quem</th>
-                  <th className="py-2 px-4 border-b text-left">Categoria</th>
-                  <th className="py-2 px-4 border-b text-left">Cartão</th>
-                  <th className="py-2 px-4 border-b text-left">Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comprasFiltradas.map((c) => {
-                  const parcelaNoMesSelecionado = calcularParcelaPorMes(c.data, c.parcelas, mesSelecionado, anoSelecionado);
-                  const parcelaAtiva = parcelaNoMesSelecionado >= 1 && parcelaNoMesSelecionado <= parseInt(c.parcelas);
-                  const valorMensal = valorParcela(c.valor, c.parcelas);
-                  
-                  return (
-                    <tr 
-                      key={c.id} 
-                      className={!parcelaAtiva ? "bg-gray-50 opacity-60" : parcelaNoMesSelecionado === parseInt(c.parcelas) ? "bg-green-50" : ""}
-                    >
-                      <td className="py-2 px-4 border-b">
-                        {new Date(c.data).toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="py-2 px-4 border-b">{c.descricao}</td>
-                      <td className="py-2 px-4 border-b">R${parseFloat(c.valor).toFixed(2)}</td>
-                      <td className="py-2 px-4 border-b">
-                        <div className="flex items-center">
-                          <div className="flex-1">
-                            <div className="text-sm font-medium">
-                              {parcelaNoMesSelecionado}/{c.parcelas}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-2 px-4 border-b">R${valorMensal}</td>
-                      <td className="py-2 px-4 border-b">{c.quem}</td>
-                      <td className="py-2 px-4 border-b">
-                        {(() => {
-                          const [catId, subcat] = c.categoria.split(':');
-                          const categoria = categorias.find(cat => cat.id === catId);
-                          if (!categoria) return 'Categoria não encontrada';
-                          return subcat ? `${categoria.nome} > ${subcat}` : categoria.nome;
-                        })()}
-                      </td>
-                      <td className="py-2 px-4 border-b">{c.cartao}</td>
-                      <td className="py-2 px-4 border-b">
-                        <button 
-                          onClick={() => editarCompra(c)}
-                          className="text-blue-500 hover:text-blue-700 mr-2"
-                        >
-                          Editar
-                        </button>
-                        <button 
-                          onClick={() => excluirCompra(c.id)}
-                          className="text-red-500 hover:text-red-700"
-                        >
-                          Excluir
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          ) : (
-            <p className="text-center text-gray-500">Nenhuma compra encontrada.</p>
-          )}
+        <div className="mt-4">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="compartilhada"
+              checked={form.compartilhada}
+              onChange={(e) => setForm({ ...form, compartilhada: e.target.checked })}
+              className="mr-2"
+            />
+            <span className="text-sm font-medium">Compra compartilhada?</span>
+          </label>
         </div>
+
+        {form.compartilhada && (
+          <div className="mt-4">
+            <h4 className="text-sm font-medium mb-2">Divisão</h4>
+            {form.divisao.map((div, index) => (
+              <div key={index} className="flex gap-2 mb-2">
+                <select
+                  value={div.usuario}
+                  onChange={(e) => handleDivisaoChange(index, 'usuario', e.target.value)}
+                  className="p-2 border border-gray-300 rounded"
+                >
+                  <option value="">Selecione um usuário</option>
+                  {usuarios.map((usuario, i) => (
+                    <option key={i} value={usuario}>{usuario}</option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  value={div.percentual}
+                  onChange={(e) => handleDivisaoChange(index, 'percentual', e.target.value)}
+                  placeholder="Percentual"
+                  className="w-24 p-2 border border-gray-300 rounded"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRemoverDivisao(index)}
+                  className="text-red-500"
+                >
+                  Remover
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={handleAdicionarDivisao}
+              className="text-blue-500 text-sm"
+            >
+              + Adicionar pessoa
+            </button>
+          </div>
+        )}
+
+        <div className="mt-6 flex justify-end">
+          <button
+            type="submit"
+            className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+          >
+            {form.id ? 'Atualizar' : 'Adicionar'} Compra
+          </button>
+        </div>
+      </form>
+
+      {/* Lista de Compras */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <table className="min-w-full">
+          <thead>
+            <tr className="bg-gray-50">
+              <th className="py-2 px-4 border-b text-left">Data</th>
+              <th className="py-2 px-4 border-b text-left">Descrição</th>
+              <th className="py-2 px-4 border-b text-left">Categoria</th>
+              <th className="py-2 px-4 border-b text-right">Valor</th>
+              <th className="py-2 px-4 border-b text-center">Parcela</th>
+              <th className="py-2 px-4 border-b text-left">Cartão</th>
+              <th className="py-2 px-4 border-b text-left">Quem</th>
+              <th className="py-2 px-4 border-b text-center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {compras
+              .filter(c => {
+                const matchFiltro = c.descricao.toLowerCase().includes(filtro.toLowerCase()) ||
+                                  c.quem.toLowerCase().includes(filtro.toLowerCase());
+                const matchCartao = !filtroCartao || c.cartao === filtroCartao;
+                return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado) && matchFiltro && matchCartao;
+              })
+              .sort((a, b) => {
+                if (ordenacao === "data-desc") return new Date(b.data) - new Date(a.data);
+                if (ordenacao === "data-asc") return new Date(a.data) - new Date(b.data);
+                if (ordenacao === "valor-desc") return b.valor - a.valor;
+                return a.valor - b.valor;
+              })
+              .map((c) => (
+                <tr key={c.id} className="hover:bg-gray-50">
+                  <td className="py-2 px-4 border-b">
+                    {new Date(c.data).toLocaleDateString()}
+                  </td>
+                  <td className="py-2 px-4 border-b">{c.descricao}</td>
+                  <td className="py-2 px-4 border-b">
+                    {(() => {
+                      const [catId, subcat] = c.categoria.split(':');
+                      const categoria = categorias.find(cat => cat.id === catId);
+                      return categoria ? (subcat ? `${categoria.nome} > ${subcat}` : categoria.nome) : 'N/A';
+                    })()}
+                  </td>
+                  <td className="py-2 px-4 border-b text-right">
+                    R$ {parseFloat(valorParcela(c.valor, c.parcelas)).toFixed(2)}
+                  </td>
+                  <td className="py-2 px-4 border-b text-center">
+                    {calcularParcelaPorMes(c.data, c.parcelas, mesSelecionado, anoSelecionado)}/{c.parcelas}
+                  </td>
+                  <td className="py-2 px-4 border-b">{c.cartao}</td>
+                  <td className="py-2 px-4 border-b">
+                    {c.compartilhada ? (
+                      <div className="text-xs">
+                        {c.divisao.map((d, i) => (
+                          <div key={i}>{d.usuario} ({d.percentual}%)</div>
+                        ))}
+                      </div>
+                    ) : c.quem}
+                  </td>
+                  <td className="py-2 px-4 border-b text-center">
+                    <button
+                      onClick={() => {
+                        setForm(c);
+                        setCompraParaEditar(c);
+                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                      }}
+                      className="text-blue-600 hover:text-blue-800 mr-2"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm('Tem certeza que deseja excluir esta compra?')) {
+                          setCompras(prevCompras => prevCompras.filter(comp => comp.id !== c.id));
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Excluir
+                    </button>
+                  </td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
       </div>
+
+      {/* Modais */}
+      {mostrarModalUsuarios && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
+            <h2 className="text-xl font-semibold mb-4">Gerenciar Usuários</h2>
+            
+            <div className="overflow-y-auto flex-1">
+              <div className="mb-4 flex gap-2">
+                <input
+                  type="text"
+                  value={novoUsuario}
+                  onChange={(e) => setNovoUsuario(e.target.value)}
+                  placeholder="Nome do novo usuário"
+                  className="flex-1 p-2 border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    if (novoUsuario.trim()) {
+                      setUsuarios([...usuarios, novoUsuario.trim()]);
+                      setNovoUsuario("");
+                    }
+                  }}
+                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                >
+                  Adicionar
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {usuarios.map((usuario, index) => (
+                  <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <span>{usuario}</span>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Deseja remover ${usuario}?`)) {
+                          setUsuarios(usuarios.filter(u => u !== usuario));
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t">
+              <button
+                onClick={() => setMostrarModalUsuarios(false)}
+                className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalCartoes && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
+            <h2 className="text-xl font-semibold mb-4">Gerenciar Cartões</h2>
+            
+            <div className="overflow-y-auto flex-1">
+              <div className="mb-4 flex gap-2">
+                <input
+                  type="text"
+                  value={novoCartao}
+                  onChange={(e) => setNovoCartao(e.target.value)}
+                  placeholder="Nome do novo cartão"
+                  className="flex-1 p-2 border border-gray-300 rounded"
+                />
+                <button
+                  onClick={() => {
+                    if (novoCartao.trim()) {
+                      setCartoes([...cartoes, novoCartao.trim()]);
+                      setNovoCartao("");
+                    }
+                  }}
+                  className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                >
+                  Adicionar
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                {cartoes.map((cartao, index) => (
+                  <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                    <span>{cartao}</span>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Deseja remover ${cartao}?`)) {
+                          setCartoes(cartoes.filter(c => c !== cartao));
+                        }
+                      }}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t">
+              <button
+                onClick={() => setMostrarModalCartoes(false)}
+                className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalCategorias && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
+            <h2 className="text-xl font-semibold mb-4">Gerenciar Categorias</h2>
+            
+            <div className="overflow-y-auto flex-1">
+              <div className="mb-6">
+                <h3 className="text-lg font-medium mb-2">Nova Categoria</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <input
+                    type="text"
+                    placeholder="Nome da categoria"
+                    value={categoriaParaEditar?.nome || ""}
+                    onChange={(e) => setCategoriaParaEditar(prev => ({
+                      ...prev,
+                      nome: e.target.value
+                    }))}
+                    className="p-2 border border-gray-300 rounded"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Ícone (ex: mdi:food)"
+                    value={categoriaParaEditar?.icone || ""}
+                    onChange={(e) => setCategoriaParaEditar(prev => ({
+                      ...prev,
+                      icone: e.target.value
+                    }))}
+                    className="p-2 border border-gray-300 rounded"
+                  />
+                  <input
+                    type="color"
+                    value={categoriaParaEditar?.cor || "#000000"}
+                    onChange={(e) => setCategoriaParaEditar(prev => ({
+                      ...prev,
+                      cor: e.target.value
+                    }))}
+                    className="p-2 border border-gray-300 rounded"
+                  />
+                </div>
+                <button
+                  onClick={() => {
+                    if (categoriaParaEditar?.nome) {
+                      const novaCategoria = {
+                        id: Date.now().toString(),
+                        nome: categoriaParaEditar.nome,
+                        icone: categoriaParaEditar.icone || "mdi:folder",
+                        cor: categoriaParaEditar.cor || "#000000",
+                        subcategorias: []
+                      };
+                      setCategorias([...categorias, novaCategoria]);
+                      setCategoriaParaEditar(null);
+                    }
+                  }}
+                  className="mt-2 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
+                >
+                  Adicionar Categoria
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {categorias.map((categoria) => (
+                  <div key={categoria.id} className="p-4 bg-gray-50 rounded">
+                    <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                        <Icon icon={categoria.icone} style={{ color: categoria.cor }} />
+                        <span className="font-medium">{categoria.nome}</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Deseja remover ${categoria.nome}?`)) {
+                            setCategorias(categorias.filter(c => c.id !== categoria.id));
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Remover
+                      </button>
+                    </div>
+
+                    <div className="mt-2">
+                      <div className="flex gap-2 mb-2">
+                        <input
+                          type="text"
+                          value={novaSubcategoria}
+                          onChange={(e) => setNovaSubcategoria(e.target.value)}
+                          placeholder="Nova subcategoria"
+                          className="flex-1 p-2 border border-gray-300 rounded"
+                        />
+                        <button
+                          onClick={() => {
+                            if (novaSubcategoria.trim()) {
+                              setCategorias(categorias.map(cat => 
+                                cat.id === categoria.id
+                                  ? { ...cat, subcategorias: [...cat.subcategorias, novaSubcategoria.trim()] }
+                                  : cat
+                              ));
+                              setNovaSubcategoria("");
+                            }
+                          }}
+                          className="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700"
+                        >
+                          Adicionar
+                        </button>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        {categoria.subcategorias.map((sub, index) => (
+                          <span
+                            key={index}
+                            className="inline-flex items-center bg-white px-2 py-1 rounded border"
+                          >
+                            {sub}
+                            <button
+                              onClick={() => {
+                                setCategorias(categorias.map(cat => 
+                                  cat.id === categoria.id
+                                    ? { ...cat, subcategorias: cat.subcategorias.filter((_, i) => i !== index) }
+                                    : cat
+                                ));
+                              }}
+                              className="ml-2 text-red-600 hover:text-red-800"
+                            >
+                              ×
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t">
+              <button
+                onClick={() => {
+                  setMostrarModalCategorias(false);
+                  setCategoriaParaEditar(null);
+                }}
+                className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
