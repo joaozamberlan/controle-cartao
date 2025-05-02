@@ -51,7 +51,7 @@ export default function App() {
   });
   const [cartoes, setCartoes] = useState(() => {
     const savedCartoes = localStorage.getItem("cartoes");
-    return savedCartoes ? JSON.parse(savedCartoes) : ["Nubank", "Inter"];
+    return savedCartoes ? JSON.parse(savedCartoes) : [];
   });
   const [categorias, setCategorias] = useState(() => {
     const savedCategorias = localStorage.getItem("categorias");
@@ -156,7 +156,14 @@ export default function App() {
       }
     ];
   });
+  const [comprasRecorrentes, setComprasRecorrentes] = useState(() => {
+    const saved = localStorage.getItem("comprasRecorrentes");
+    return saved ? JSON.parse(saved) : [];
+  });
   
+  // Adicione este estado para controlar o modal
+  const [mostrarModalRecorrentes, setMostrarModalRecorrentes] = useState(false);
+
   // Form states
   const [form, setForm] = useState({
     id: null,
@@ -189,16 +196,18 @@ export default function App() {
   const [novoUsuario, setNovoUsuario] = useState("");
   const [novoCartao, setNovoCartao] = useState("");
   const [novaSubcategoria, setNovaSubcategoria] = useState("");
+  const [novoFechamento, setNovoFechamento] = useState("");
+  const [novoVencimento, setNovoVencimento] = useState("");
 
   // 3. Helper functions
   const valorParcela = (valor, parcelas) => {
     return (parseFloat(valor) / parseInt(parcelas)).toFixed(2);
   };
 
-  const parcelaNoMes = (dataCompra, totalParcelas, mesSelecionado, anoSelecionado) => {
-    const compra = new Date(dataCompra);
-    const diffMeses = (anoSelecionado - compra.getFullYear()) * 12 + 
-                     (mesSelecionado - compra.getMonth());
+  const parcelaNoMes = (dataCompra, totalParcelas, mesSelecionado, anoSelecionado, cartao) => {
+    const dataAjustada = determinarMesCompra(dataCompra, cartao);
+    const diffMeses = (anoSelecionado - dataAjustada.getFullYear()) * 12 + 
+                     (mesSelecionado - dataAjustada.getMonth());
     const parcela = diffMeses + 1;
     return parcela >= 1 && parcela <= parseInt(totalParcelas);
   };
@@ -208,6 +217,51 @@ export default function App() {
     const diffMeses = (anoSelecionado - compra.getFullYear()) * 12 + 
                      (mesSelecionado - compra.getMonth());
     return diffMeses + 1;
+  };
+
+  const determinarMesCompra = (dataCompra, cartao) => {
+    const data = new Date(dataCompra);
+    const cartaoInfo = cartoes.find(c => c.nome === cartao);
+    
+    if (!cartaoInfo) return data;
+  
+    // Se a data da compra for depois do fechamento, a compra vai para o próximo mês
+    if (data.getDate() > cartaoInfo.diaFechamento) {
+      data.setMonth(data.getMonth() + 1);
+    }
+    
+    return data;
+  };
+
+  const processarComprasRecorrentes = () => {
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth();
+    const anoAtual = hoje.getFullYear();
+
+    comprasRecorrentes.forEach(recorrente => {
+      // Verifica se já existe uma compra para este mês
+      const existeCompra = compras.some(compra => {
+        const dataCompra = new Date(compra.data);
+        return dataCompra.getMonth() === mesAtual &&
+               dataCompra.getFullYear() === anoAtual &&
+               compra.compraRecorrenteId === recorrente.id;
+      });
+
+      if (!existeCompra) {
+        // Cria nova data mantendo o dia definido na recorrência
+        const novaData = new Date(anoAtual, mesAtual, recorrente.diaVencimento);
+        
+        const novaCompra = {
+          ...recorrente.dadosCompra,
+          id: Date.now().toString(),
+          data: novaData.toISOString().split('T')[0],
+          compraRecorrenteId: recorrente.id,
+          dataRegistro: new Date().toISOString()
+        };
+
+        setCompras(prev => [...prev, novaCompra]);
+      }
+    });
   };
 
   // 4. Funções que dependem dos estados
@@ -229,7 +283,7 @@ export default function App() {
     cartoes.forEach(card => dadosCartoes[card] = 0);
 
     compras.forEach(compra => {
-      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
+      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado, compra.cartao)) {
         const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
         
         const categoriaId = compra.categoria.split(':')[0];
@@ -276,7 +330,7 @@ export default function App() {
     });
 
     compras.forEach(compra => {
-      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado)) {
+      if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado, compra.cartao)) {
         const valorParcelaAtual = parseFloat(valorParcela(compra.valor, compra.parcelas));
 
         if (compra.compartilhada && compra.divisao) {
@@ -300,19 +354,54 @@ export default function App() {
   const handleSubmit = (e) => {
     e.preventDefault();
     
+    console.log('Form data being submitted:', form);
+
     try {
-      if (!form.data || !form.descricao || !form.valor || !form.quem || !form.cartao || !form.categoria) {
-        alert('Por favor, preencha todos os campos obrigatórios');
+      // More specific validation with helpful error messages
+      const errors = [];
+      if (!form.data) errors.push('Data é obrigatória');
+      if (!form.descricao) errors.push('Descrição é obrigatória');
+      if (!form.valor || parseFloat(form.valor) <= 0) errors.push('Valor deve ser maior que zero');
+      if (!form.quem) errors.push('Selecione quem fez a compra');
+      if (!form.cartao) errors.push('Selecione um cartão');
+      if (!form.categoria) errors.push('Selecione uma categoria');
+
+      if (errors.length > 0) {
+        alert('Por favor, corrija os seguintes erros:\n\n' + errors.join('\n'));
         return;
       }
 
+      // Ensure proper data types and default values
       const novaCompra = {
         ...form,
         id: form.id || Date.now().toString(),
-        valor: parseFloat(form.valor),
+        valor: parseFloat(form.valor) || 0,
         parcelas: parseInt(form.parcelas) || 1,
-        dataRegistro: new Date().toISOString()
+        dataRegistro: new Date().toISOString(),
+        compartilhada: !!form.compartilhada,
+        divisao: form.compartilhada ? form.divisao : [{ usuario: form.quem, percentual: 100 }]
       };
+
+      // Validate division percentages if purchase is shared
+      if (novaCompra.compartilhada) {
+        const totalPercentual = novaCompra.divisao.reduce((acc, div) => acc + (parseInt(div.percentual) || 0), 0);
+        if (totalPercentual !== 100) {
+          alert('O total dos percentuais deve ser 100%');
+          return;
+        }
+      }
+
+      // Se for uma compra recorrente, salva nas recorrências
+      if (form.recorrente) {
+        const novaRecorrencia = {
+          id: Date.now().toString(),
+          diaVencimento: parseInt(form.diaVencimento),
+          frequencia: form.frequencia,
+          dadosCompra: novaCompra
+        };
+        
+        setComprasRecorrentes(prev => [...prev, novaRecorrencia]);
+      }
 
       setCompras(prevCompras => {
         const novasCompras = form.id 
@@ -322,6 +411,7 @@ export default function App() {
         return novasCompras;
       });
 
+      // Reset form after successful submission
       setForm({
         id: null,
         data: "",
@@ -337,10 +427,10 @@ export default function App() {
         frequencia: "mensal",
         diaVencimento: ""
       });
-      
+        
     } catch (error) {
       console.error('Erro ao salvar compra:', error);
-      alert('Erro ao salvar a compra. Por favor, verifique os dados.');
+      alert('Erro ao salvar a compra: ' + error.message);
     }
   };
 
@@ -402,6 +492,14 @@ export default function App() {
     localStorage.setItem("categorias", JSON.stringify(categorias));
   }, [categorias]);
 
+  useEffect(() => {
+    processarComprasRecorrentes();
+  }, [mesSelecionado, anoSelecionado]); // Processa quando mudar o mês/ano
+
+  useEffect(() => {
+    localStorage.setItem("comprasRecorrentes", JSON.stringify(comprasRecorrentes));
+  }, [comprasRecorrentes]);
+
   // ...resto do seu componente...
 
   return (
@@ -427,6 +525,12 @@ export default function App() {
             className="bg-purple-600 text-white py-1 px-3 rounded hover:bg-purple-700 text-sm"
           >
             Gerenciar Categorias
+          </button>
+          <button
+            onClick={() => setMostrarModalRecorrentes(true)}
+            className="bg-orange-600 text-white py-1 px-3 rounded hover:bg-orange-700 text-sm"
+          >
+            Gerenciar Recorrências
           </button>
         </div>
       </div>
@@ -573,7 +677,9 @@ export default function App() {
             >
               <option value="">Selecione...</option>
               {cartoes.map((cartao, index) => (
-                <option key={index} value={cartao}>{cartao}</option>
+                <option key={index} value={cartao.nome}>
+                  {cartao.nome} (Fecha: {cartao.diaFechamento}, Vence: {cartao.diaVencimento})
+                </option>
               ))}
             </select>
           </div>
@@ -660,6 +766,53 @@ export default function App() {
           </div>
         )}
 
+        <div className="mt-4 p-4 bg-gray-50 rounded">
+          <label className="flex items-center mb-2">
+            <input
+              type="checkbox"
+              name="recorrente"
+              checked={form.recorrente}
+              onChange={(e) => setForm({ ...form, recorrente: e.target.checked })}
+              className="mr-2"
+            />
+            <span className="text-sm font-medium">Compra Recorrente?</span>
+          </label>
+
+          {form.recorrente && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-1">Frequência</label>
+                <select
+                  name="frequencia"
+                  value={form.frequencia}
+                  onChange={handleChange}
+                  className="w-full p-2 border border-gray-300 rounded"
+                >
+                  <option value="mensal">Mensal</option>
+                  <option value="bimestral">Bimestral</option>
+                  <option value="trimestral">Trimestral</option>
+                  <option value="semestral">Semestral</option>
+                  <option value="anual">Anual</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-1">Dia do Vencimento</label>
+                <input
+                  type="number"
+                  name="diaVencimento"
+                  value={form.diaVencimento}
+                  onChange={handleChange}
+                  min="1"
+                  max="31"
+                  className="w-full p-2 border border-gray-300 rounded"
+                  placeholder="Dia do mês"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
         <div className="mt-6 flex justify-end">
           <button
             type="submit"
@@ -689,9 +842,11 @@ export default function App() {
             {compras
               .filter(c => {
                 const matchFiltro = c.descricao.toLowerCase().includes(filtro.toLowerCase()) ||
-                                  c.quem.toLowerCase().includes(filtro.toLowerCase());
+                                   c.quem.toLowerCase().includes(filtro.toLowerCase());
                 const matchCartao = !filtroCartao || c.cartao === filtroCartao;
-                return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado) && matchFiltro && matchCartao;
+                return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado, c.cartao) && 
+                       matchFiltro && 
+                       matchCartao;
               })
               .sort((a, b) => {
                 if (ordenacao === "data-desc") return new Date(b.data) - new Date(a.data);
@@ -821,19 +976,46 @@ export default function App() {
             <h2 className="text-xl font-semibold mb-4">Gerenciar Cartões</h2>
             
             <div className="overflow-y-auto flex-1">
-              <div className="mb-4 flex gap-2">
+              {/* Formulário para adicionar/editar cartão */}
+              <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-2">
                 <input
                   type="text"
                   value={novoCartao}
                   onChange={(e) => setNovoCartao(e.target.value)}
-                  placeholder="Nome do novo cartão"
-                  className="flex-1 p-2 border border-gray-300 rounded"
+                  placeholder="Nome do cartão"
+                  className="p-2 border border-gray-300 rounded"
+                />
+                <input
+                  type="number"
+                  value={novoFechamento}
+                  onChange={(e) => setNovoFechamento(e.target.value)}
+                  placeholder="Dia fechamento"
+                  min="1"
+                  max="31"
+                  className="p-2 border border-gray-300 rounded"
+                />
+                <input
+                  type="number"
+                  value={novoVencimento}
+                  onChange={(e) => setNovoVencimento(e.target.value)}
+                  placeholder="Dia vencimento"
+                  min="1"
+                  max="31"
+                  className="p-2 border border-gray-300 rounded"
                 />
                 <button
                   onClick={() => {
-                    if (novoCartao.trim()) {
-                      setCartoes([...cartoes, novoCartao.trim()]);
+                    if (novoCartao.trim() && novoFechamento && novoVencimento) {
+                      setCartoes(prev => [...prev, { 
+                        nome: novoCartao.trim(),
+                        diaFechamento: parseInt(novoFechamento),
+                        diaVencimento: parseInt(novoVencimento)
+                      }]);
                       setNovoCartao("");
+                      setNovoFechamento("");
+                      setNovoVencimento("");
+                    } else {
+                      alert("Preencha todos os campos do cartão");
                     }
                   }}
                   className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700"
@@ -842,28 +1024,61 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Lista de cartões cadastrados */}
               <div className="space-y-2">
                 {cartoes.map((cartao, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                    <span>{cartao}</span>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Deseja remover ${cartao}?`)) {
-                          setCartoes(cartoes.filter(c => c !== cartao));
-                        }
-                      }}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      Remover
-                    </button>
+                    <div>
+                      <span className="font-medium">{cartao.nome}</span>
+                      <span className="ml-2 text-gray-500">
+                        Fecha dia {cartao.diaFechamento} e vence dia {cartao.diaVencimento}
+                      </span>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          // Preencher o formulário com os dados do cartão para edição
+                          setNovoCartao(cartao.nome);
+                          setNovoFechamento(cartao.diaFechamento.toString());
+                          setNovoVencimento(cartao.diaVencimento.toString());
+                          // Remover o cartão atual
+                          setCartoes(prev => prev.filter((_, i) => i !== index));
+                        }}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        Editar
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Deseja remover o cartão ${cartao.nome}?`)) {
+                            setCartoes(prev => prev.filter((_, i) => i !== index));
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Remover
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              {cartoes.length === 0 && (
+                <div className="text-center text-gray-500 my-4">
+                  Nenhum cartão cadastrado. Adicione um cartão usando o formulário acima.
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end mt-4 pt-4 border-t">
               <button
-                onClick={() => setMostrarModalCartoes(false)}
+                onClick={() => {
+                  setMostrarModalCartoes(false);
+                  // Limpar formulário ao fechar
+                  setNovoCartao("");
+                  setNovoFechamento("");
+                  setNovoVencimento("");
+                }}
                 className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
               >
                 Fechar
@@ -1012,6 +1227,58 @@ export default function App() {
                   setMostrarModalCategorias(false);
                   setCategoriaParaEditar(null);
                 }}
+                className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mostrarModalRecorrentes && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] flex flex-col m-4">
+            <h2 className="text-xl font-semibold mb-4">Gerenciar Compras Recorrentes</h2>
+            
+            <div className="overflow-y-auto flex-1">
+              {comprasRecorrentes.length === 0 ? (
+                <p className="text-center text-gray-500">
+                  Nenhuma compra recorrente cadastrada.
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {comprasRecorrentes.map((recorrente) => (
+                    <div key={recorrente.id} className="p-4 bg-gray-50 rounded flex justify-between items-center">
+                      <div>
+                        <h3 className="font-medium">{recorrente.dadosCompra.descricao}</h3>
+                        <p className="text-sm text-gray-600">
+                          R$ {recorrente.dadosCompra.valor} • 
+                          Dia {recorrente.diaVencimento} • 
+                          {recorrente.frequencia}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (window.confirm('Deseja remover esta recorrência?')) {
+                            setComprasRecorrentes(prev => 
+                              prev.filter(r => r.id !== recorrente.id)
+                            );
+                          }
+                        }}
+                        className="text-red-600 hover:text-red-800"
+                      >
+                        Remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end mt-4 pt-4 border-t">
+              <button
+                onClick={() => setMostrarModalRecorrentes(false)}
                 className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
               >
                 Fechar
