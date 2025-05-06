@@ -199,6 +199,15 @@ export default function App() {
   const [novoFechamento, setNovoFechamento] = useState("");
   const [novoVencimento, setNovoVencimento] = useState("");
 
+  // Adicione esses estados no início do componente, junto com os outros states:
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(10);
+
+  // Adicione essa função para calcular o total de páginas:
+  const calcularTotalPaginas = (listaFiltrada) => {
+    return Math.ceil(listaFiltrada.length / itensPorPagina);
+  };
+
   // 3. Helper functions
   const valorParcela = (valor, parcelas) => {
     return (parseFloat(valor) / parseInt(parcelas)).toFixed(2);
@@ -841,22 +850,44 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {compras
-              .filter(c => {
-                const matchFiltro = c.descricao.toLowerCase().includes(filtro.toLowerCase()) ||
-                                   c.quem.toLowerCase().includes(filtro.toLowerCase());
-                const matchCartao = !filtroCartao || c.cartao === filtroCartao;
-                return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado, c.cartao) && 
-                       matchFiltro && 
-                       matchCartao;
-              })
-              .sort((a, b) => {
-                if (ordenacao === "data-desc") return new Date(b.data) - new Date(a.data);
-                if (ordenacao === "data-asc") return new Date(a.data) - new Date(b.data);
-                if (ordenacao === "valor-desc") return b.valor - a.valor;
-                return a.valor - b.valor;
-              })
-              .map((c) => (
+            {(() => {
+              // Filtra as compras primeiro
+              const comprasFiltradas = compras
+                .filter(c => {
+                  const matchFiltro = c.descricao.toLowerCase().includes(filtro.toLowerCase()) ||
+                                    c.quem.toLowerCase().includes(filtro.toLowerCase());
+                  const matchCartao = !filtroCartao || c.cartao === filtroCartao;
+                  return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado, c.cartao) && 
+                        matchFiltro && 
+                        matchCartao;
+                })
+                .sort((a, b) => {
+                  if (ordenacao === "data-desc") return new Date(b.data) - new Date(a.data);
+                  if (ordenacao === "data-asc") return new Date(a.data) - new Date(b.data);
+                  if (ordenacao === "valor-desc") return b.valor - a.valor;
+                  return a.valor - b.valor;
+                });
+                
+              // Calcula os índices para a página atual
+              const indexInicial = (paginaAtual - 1) * itensPorPagina;
+              const indexFinal = indexInicial + itensPorPagina;
+              
+              // Obtém apenas os itens da página atual
+              const comprasPaginadas = comprasFiltradas.slice(indexInicial, indexFinal);
+              
+              // Se não houver compras para mostrar
+              if (comprasFiltradas.length === 0) {
+                return (
+                  <tr>
+                    <td colSpan="8" className="py-4 text-center text-gray-500">
+                      Nenhuma compra encontrada para este período ou filtro.
+                    </td>
+                  </tr>
+                );
+              }
+              
+              // Retorna os itens para a página atual
+              return comprasPaginadas.map((c) => (
                 <tr key={c.id} className="hover:bg-gray-50">
                   <td className="py-2 px-4 border-b">
                     {new Date(c.data).toLocaleDateString()}
@@ -908,9 +939,88 @@ export default function App() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              ));
+            })()}
           </tbody>
         </table>
+        
+        {/* Controles de paginação */}
+        {(() => {
+          const comprasFiltradas = compras.filter(c => {
+            const matchFiltro = c.descricao.toLowerCase().includes(filtro.toLowerCase()) ||
+                              c.quem.toLowerCase().includes(filtro.toLowerCase());
+            const matchCartao = !filtroCartao || c.cartao === filtroCartao;
+            return parcelaNoMes(c.data, c.parcelas, mesSelecionado, anoSelecionado, c.cartao) && 
+                  matchFiltro && 
+                  matchCartao;
+          });
+          
+          const totalPaginas = calcularTotalPaginas(comprasFiltradas);
+          
+          if (totalPaginas <= 1) return null;
+          
+          return (
+            <div className="py-4 px-6 flex items-center justify-between border-t">
+              <div className="flex items-center">
+                <span className="text-sm text-gray-700">
+                  Mostrando <span className="font-medium">{Math.min(comprasFiltradas.length, (paginaAtual - 1) * itensPorPagina + 1)}</span> a <span className="font-medium">{Math.min(paginaAtual * itensPorPagina, comprasFiltradas.length)}</span> de <span className="font-medium">{comprasFiltradas.length}</span> compras
+                </span>
+                
+                <div className="ml-4">
+                  <select 
+                    value={itensPorPagina}
+                    onChange={e => {
+                      setItensPorPagina(Number(e.target.value));
+                      setPaginaAtual(1); // Volta para a primeira página ao mudar itens por página
+                    }}
+                    className="bg-white border border-gray-300 rounded px-2 py-1 text-sm"
+                  >
+                    <option value="5">5 por página</option>
+                    <option value="10">10 por página</option>
+                    <option value="20">20 por página</option>
+                    <option value="50">50 por página</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setPaginaAtual(1)}
+                  disabled={paginaAtual === 1}
+                  className={`px-3 py-1 rounded ${paginaAtual === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  &laquo;
+                </button>
+                <button
+                  onClick={() => setPaginaAtual(prev => Math.max(prev - 1, 1))}
+                  disabled={paginaAtual === 1}
+                  className={`px-3 py-1 rounded ${paginaAtual === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  &lsaquo;
+                </button>
+                
+                <span className="px-3 py-1 text-gray-700">
+                  Página {paginaAtual} de {totalPaginas}
+                </span>
+                
+                <button
+                  onClick={() => setPaginaAtual(prev => Math.min(prev + 1, totalPaginas))}
+                  disabled={paginaAtual === totalPaginas}
+                  className={`px-3 py-1 rounded ${paginaAtual === totalPaginas ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  &rsaquo;
+                </button>
+                <button
+                  onClick={() => setPaginaAtual(totalPaginas)}
+                  disabled={paginaAtual === totalPaginas}
+                  className={`px-3 py-1 rounded ${paginaAtual === totalPaginas ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                >
+                  &raquo;
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modais */}
