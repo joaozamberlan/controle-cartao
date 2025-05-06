@@ -280,7 +280,8 @@ export default function App() {
     });
 
     usuarios.forEach(user => dadosUsuarios[user] = 0);
-    cartoes.forEach(card => dadosCartoes[card] = 0);
+    // Use a propriedade nome do cartão como chave
+    cartoes.forEach(card => dadosCartoes[card.nome] = 0);
 
     compras.forEach(compra => {
       if (parcelaNoMes(compra.data, compra.parcelas, mesSelecionado, anoSelecionado, compra.cartao)) {
@@ -291,6 +292,7 @@ export default function App() {
           dadosCategorias[categoriaId].value += valorParcelaAtual;
         }
 
+        // Usa o nome do cartão como chave
         if (dadosCartoes[compra.cartao] !== undefined) {
           dadosCartoes[compra.cartao] += valorParcelaAtual;
         }
@@ -554,8 +556,8 @@ export default function App() {
             className="w-full p-2 border border-gray-300 rounded"
           >
             <option value="">Todos os cartões</option>
-            {cartoes.map((cartao, index) => (
-              <option key={index} value={cartao}>{cartao}</option>
+            {Array.isArray(cartoes) && cartoes.map((cartao, index) => (
+              <option key={index} value={cartao.nome}>{cartao.nome}</option>
             ))}
           </select>
         </div>
@@ -1006,11 +1008,16 @@ export default function App() {
                 <button
                   onClick={() => {
                     if (novoCartao.trim() && novoFechamento && novoVencimento) {
-                      setCartoes(prev => [...prev, { 
+                      const novoCartaoObj = {
                         nome: novoCartao.trim(),
                         diaFechamento: parseInt(novoFechamento),
                         diaVencimento: parseInt(novoVencimento)
-                      }]);
+                      };
+
+                      // Adicione esta linha, que estava faltando
+                      setCartoes(cartoesAtuais => [...cartoesAtuais, novoCartaoObj]);
+
+                      // Limpa os campos
                       setNovoCartao("");
                       setNovoFechamento("");
                       setNovoVencimento("");
@@ -1026,7 +1033,7 @@ export default function App() {
 
               {/* Lista de cartões cadastrados */}
               <div className="space-y-2">
-                {cartoes.map((cartao, index) => (
+                {Array.isArray(cartoes) && cartoes.map((cartao, index) => (
                   <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
                     <div>
                       <span className="font-medium">{cartao.nome}</span>
@@ -1037,11 +1044,9 @@ export default function App() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => {
-                          // Preencher o formulário com os dados do cartão para edição
                           setNovoCartao(cartao.nome);
                           setNovoFechamento(cartao.diaFechamento.toString());
                           setNovoVencimento(cartao.diaVencimento.toString());
-                          // Remover o cartão atual
                           setCartoes(prev => prev.filter((_, i) => i !== index));
                         }}
                         className="text-blue-600 hover:text-blue-800"
@@ -1062,19 +1067,12 @@ export default function App() {
                   </div>
                 ))}
               </div>
-
-              {cartoes.length === 0 && (
-                <div className="text-center text-gray-500 my-4">
-                  Nenhum cartão cadastrado. Adicione um cartão usando o formulário acima.
-                </div>
-              )}
             </div>
 
             <div className="flex justify-end mt-4 pt-4 border-t">
               <button
                 onClick={() => {
                   setMostrarModalCartoes(false);
-                  // Limpar formulário ao fechar
                   setNovoCartao("");
                   setNovoFechamento("");
                   setNovoVencimento("");
