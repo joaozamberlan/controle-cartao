@@ -41,10 +41,7 @@ export default function App() {
   // 2. States
   const [mesSelecionado, setMesSelecionado] = useState(hoje.getMonth());
   const [anoSelecionado, setAnoSelecionado] = useState(hoje.getFullYear());
-  const [compras, setCompras] = useState(() => {
-    const savedCompras = localStorage.getItem("compras");
-    return savedCompras ? JSON.parse(savedCompras) : [];
-  });
+  const [compras, setCompras] = useState([]);
   const [usuarios, setUsuarios] = useState(() => {
     const savedUsuarios = localStorage.getItem("usuarios");
     return savedUsuarios ? JSON.parse(savedUsuarios) : ["Usuário 1", "Usuário 2"];
@@ -206,6 +203,128 @@ export default function App() {
   // Adicione essa função para calcular o total de páginas:
   const calcularTotalPaginas = (listaFiltrada) => {
     return Math.ceil(listaFiltrada.length / itensPorPagina);
+  };
+
+  // Adicione essas funções para otimizar o armazenamento
+
+  // Função para otimizar/compactar os dados antes de salvar
+  const otimizarDadosArmazenamento = () => {
+    // 1. Divida os dados em coleções separadas por ano/mês
+    const comprasPorPeriodo = {};
+    
+    compras.forEach(compra => {
+      const data = new Date(compra.data);
+      const chave = `${data.getFullYear()}-${data.getMonth()+1}`;
+      
+      if (!comprasPorPeriodo[chave]) {
+        comprasPorPeriodo[chave] = [];
+      }
+      
+      // 2. Versão compacta da compra
+      const compraCompacta = {
+        i: compra.id,
+        d: compra.data,
+        dc: compra.descricao,
+        p: compra.parcelas,
+        v: compra.valor,
+        q: compra.quem,
+        ct: compra.cartao,
+        cg: compra.categoria
+      };
+      
+      // Só adiciona campos extras se necessário
+      if (compra.compartilhada) {
+        compraCompacta.cp = true;
+        compraCompacta.dv = compra.divisao;
+      }
+      
+      if (compra.compraRecorrenteId) {
+        compraCompacta.r = compra.compraRecorrenteId;
+      }
+      
+      comprasPorPeriodo[chave].push(compraCompacta);
+    });
+    
+    // Salvar cada período separadamente
+    Object.entries(comprasPorPeriodo).forEach(([periodo, comprasPeriodo]) => {
+      localStorage.setItem(`compras_${periodo}`, JSON.stringify(comprasPeriodo));
+    });
+    
+    // Manter uma lista dos períodos disponíveis
+    localStorage.setItem('periodos_compras', JSON.stringify(Object.keys(comprasPorPeriodo)));
+    
+    console.log(`Dados otimizados: ${Object.keys(comprasPorPeriodo).length} períodos armazenados`);
+  };
+
+  // Função para carregar os dados otimizados
+  const carregarComprasOtimizadas = () => {
+    try {
+      const periodos = JSON.parse(localStorage.getItem('periodos_compras') || '[]');
+      
+      // Se não existirem períodos, tenta carregar do modo antigo
+      if (periodos.length === 0) {
+        const comprasAntigas = JSON.parse(localStorage.getItem('compras') || '[]');
+        if (comprasAntigas.length > 0) {
+          setCompras(comprasAntigas);
+          // Converter para o novo formato
+          otimizarDadosArmazenamento();
+        }
+        return;
+      }
+      
+      // Carregar todos os períodos e descompactar os dados
+      let todasCompras = [];
+      
+      periodos.forEach(periodo => {
+        const comprasPeriodo = JSON.parse(localStorage.getItem(`compras_${periodo}`) || '[]');
+        
+        // Converter formato compacto para o completo
+        const comprasCompletas = comprasPeriodo.map(c => ({
+          id: c.i,
+          data: c.d,
+          descricao: c.dc,
+          parcelas: c.p,
+          valor: c.v,
+          quem: c.q,
+          cartao: c.ct,
+          categoria: c.cg,
+          compartilhada: !!c.cp,
+          divisao: c.dv || [{ usuario: c.q, percentual: 100 }],
+          compraRecorrenteId: c.r || null,
+          dataRegistro: c.dr || new Date().toISOString()
+        }));
+        
+        todasCompras = [...todasCompras, ...comprasCompletas];
+      });
+      
+      setCompras(todasCompras);
+      console.log(`Carregadas ${todasCompras.length} compras de ${periodos.length} períodos`);
+    } catch (error) {
+      console.error('Erro ao carregar compras otimizadas:', error);
+      setCompras([]);
+    }
+  };
+
+  // Botão de exportação e importação no header
+  const exportarDados = () => {
+    // Obtém todos os dados
+    const todosOsDados = {
+      compras: compras,
+      usuarios: usuarios,
+      cartoes: cartoes,
+      categorias: categorias,
+      comprasRecorrentes: comprasRecorrentes
+    };
+    
+    const dataStr = JSON.stringify(todosOsDados);
+    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    
+    const exportFileDefaultName = `controle-cartao-backup-${new Date().toISOString().split('T')[0]}.json`;
+    
+    const linkElement = document.createElement('a');
+    linkElement.setAttribute('href', dataUri);
+    linkElement.setAttribute('download', exportFileDefaultName);
+    linkElement.click();
   };
 
   // 3. Helper functions
@@ -418,7 +537,7 @@ export default function App() {
         const novasCompras = form.id 
           ? prevCompras.map(c => c.id === form.id ? novaCompra : c)
           : [...prevCompras, novaCompra];
-        localStorage.setItem('compras', JSON.stringify(novasCompras));
+        otimizarDadosArmazenamento();
         return novasCompras;
       });
 
@@ -483,12 +602,13 @@ export default function App() {
 
   // 6. Effects
   useEffect(() => {
-    const data = localStorage.getItem("compras");
-    if (data) setCompras(JSON.parse(data));
+    carregarComprasOtimizadas();
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("compras", JSON.stringify(compras));
+    if (compras.length > 0) {
+      otimizarDadosArmazenamento();
+    }
   }, [compras]);
 
   useEffect(() => {
@@ -543,6 +663,52 @@ export default function App() {
           >
             Gerenciar Recorrências
           </button>
+          <button
+            onClick={exportarDados}
+            className="bg-gray-600 text-white py-1 px-3 rounded hover:bg-gray-700 text-sm"
+          >
+            Exportar Dados
+          </button>
+          {/* Adicione estes botões no header, junto com os outros botões */}
+          <button
+            onClick={exportarDados}
+            className="bg-yellow-600 text-white py-1 px-3 rounded hover:bg-yellow-700 text-sm"
+          >
+            Exportar Backup
+          </button>
+          <label className="bg-teal-600 text-white py-1 px-3 rounded hover:bg-teal-700 text-sm cursor-pointer">
+            Importar Backup
+            <input
+              type="file"
+              accept=".json"
+              onChange={(e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  try {
+                    const dadosImportados = JSON.parse(event.target.result);
+                    
+                    if (window.confirm('Isso substituirá todos os seus dados atuais. Deseja continuar?')) {
+                      if (dadosImportados.compras) setCompras(dadosImportados.compras);
+                      if (dadosImportados.usuarios) setUsuarios(dadosImportados.usuarios);
+                      if (dadosImportados.cartoes) setCartoes(dadosImportados.cartoes);
+                      if (dadosImportados.categorias) setCategorias(dadosImportados.categorias);
+                      if (dadosImportados.comprasRecorrentes) setComprasRecorrentes(dadosImportados.comprasRecorrentes);
+                      
+                      alert('Dados importados com sucesso!');
+                    }
+                  } catch (error) {
+                    console.error('Erro ao importar dados:', error);
+                    alert('Erro ao importar dados. Verifique se o arquivo está no formato correto.');
+                  }
+                };
+                reader.readAsText(file);
+              }}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
 
@@ -931,6 +1097,7 @@ export default function App() {
                       onClick={() => {
                         if (window.confirm('Tem certeza que deseja excluir esta compra?')) {
                           setCompras(prevCompras => prevCompras.filter(comp => comp.id !== c.id));
+                          otimizarDadosArmazenamento();
                         }
                       }}
                       className="text-red-600 hover:text-red-800"
