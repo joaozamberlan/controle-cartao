@@ -12,6 +12,7 @@ import {
   Legend 
 } from 'recharts';
 import { Icon } from '@iconify/react'; // Instale com: npm install @iconify/react
+import { Tooltip as ReactTooltip } from 'react-tooltip'; // Instale com: npm install react-tooltip
 
 const COLORS = [
   '#0088FE',  // Azul
@@ -168,6 +169,7 @@ export default function App() {
     descricao: "",
     parcelas: 1,
     valor: "",
+    valorParcela: "", // Adicione esta linha
     quem: "",
     compartilhada: false,
     divisao: [{ usuario: "", percentual: 100 }],
@@ -325,6 +327,80 @@ export default function App() {
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', exportFileDefaultName);
     linkElement.click();
+  };
+
+  // Adicione essa função no seu componente
+  const renderBarraProgresso = (parcelaAtual, totalParcelas, valorParcela) => {
+    const percentualCompleto = Math.round((parcelaAtual / totalParcelas) * 100);
+    const valorTotal = (valorParcela * totalParcelas).toFixed(2);
+    const valorPago = (valorParcela * parcelaAtual).toFixed(2);
+    const valorRestante = (valorParcela * (totalParcelas - parcelaAtual)).toFixed(2);
+    
+    // Determina a cor baseada no progresso
+    let corBarra = "bg-blue-500"; // Padrão: muitas parcelas restantes (azul)
+    
+    if (parcelaAtual === totalParcelas) {
+      corBarra = "bg-red-500"; // Finalizado (vermelho)
+    } else if (totalParcelas - parcelaAtual <= 2) {
+      corBarra = "bg-yellow-500"; // Poucas parcelas restantes (amarelo)
+    }
+    
+    const tooltipId = `tooltip-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    
+    return (
+      <>
+        <div 
+          className="relative w-full h-4 bg-gray-200 rounded overflow-hidden cursor-help" 
+          data-tooltip-id={tooltipId}
+        >
+          <div 
+            className={`absolute top-0 left-0 h-full ${corBarra} transition-all duration-500`} 
+            style={{ width: `${percentualCompleto}%` }}
+          >
+            <div className="h-full w-full flex items-center justify-center">
+              <span className="text-xs text-white font-bold">{percentualCompleto}%</span>
+            </div>
+          </div>
+        </div>
+        
+        <ReactTooltip id={tooltipId} place="top" effect="solid">
+          <div className="p-1">
+            <div>Parcelas pagas: {parcelaAtual} de {totalParcelas}</div>
+            <div>Valor total: R$ {valorTotal}</div>
+            <div>Valor pago: R$ {valorPago}</div>
+            <div>Valor restante: R$ {valorRestante}</div>
+          </div>
+        </ReactTooltip>
+      </>
+    );
+  };
+
+  // Adicione esta função junto com os outros handlers
+  const handleDivisaoChange = (index, campo, valor) => {
+    setForm(prev => {
+      const novaDivisao = [...prev.divisao];
+      novaDivisao[index] = {
+        ...novaDivisao[index],
+        [campo]: valor
+      };
+      
+      // Se estiver mudando um percentual, vamos fazer algumas validações
+      if (campo === 'percentual') {
+        // Garantir que o valor é um número
+        novaDivisao[index].percentual = parseInt(valor) || 0;
+        
+        // Se tiver apenas 2 pessoas, podemos calcular automaticamente
+        if (novaDivisao.length === 2) {
+          const outroIndex = index === 0 ? 1 : 0;
+          novaDivisao[outroIndex].percentual = 100 - novaDivisao[index].percentual;
+        }
+      }
+      
+      return {
+        ...prev,
+        divisao: novaDivisao
+      };
+    });
   };
 
   // 3. Helper functions
@@ -512,6 +588,9 @@ export default function App() {
         divisao: form.compartilhada ? form.divisao : [{ usuario: form.quem, percentual: 100 }]
       };
 
+      // Remova valorParcela pois não precisamos armazenar
+      delete novaCompra.valorParcela;
+
       // Validate division percentages if purchase is shared
       if (novaCompra.compartilhada) {
         const totalPercentual = novaCompra.divisao.reduce((acc, div) => acc + (parseInt(div.percentual) || 0), 0);
@@ -564,25 +643,24 @@ export default function App() {
     }
   };
 
+  // Modifique o handleChange para atualizar valores quando as parcelas mudarem
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleDivisaoChange = (index, field, value) => {
+    
     setForm(prev => {
-      const newDivisao = [...prev.divisao];
-      newDivisao[index] = {
-        ...newDivisao[index],
-        [field]: value
-      };
-      return {
+      const newForm = {
         ...prev,
-        divisao: newDivisao
+        [name]: value
       };
+      
+      // Se mudou o número de parcelas, recalcular valorParcela
+      if (name === 'parcelas' && prev.valor) {
+        const parcelas = parseInt(value) || 1;
+        const valor = parseFloat(prev.valor) || 0;
+        newForm.valorParcela = (valor / parcelas).toFixed(2);
+      }
+      
+      return newForm;
     });
   };
 
@@ -810,16 +888,53 @@ export default function App() {
             />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Valor</label>
-            <input
-              type="number"
-              name="valor"
-              value={form.valor}
-              onChange={handleChange}
-              step="0.01"
-              className="w-full p-2 border border-gray-300 rounded"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Valor da Parcela</label>
+              <div className="flex">
+                <input
+                  type="number"
+                  name="valorParcela"
+                  value={form.valorParcela || ''}
+                  onChange={(e) => {
+                    const valorParcela = parseFloat(e.target.value) || 0;
+                    const parcelas = parseInt(form.parcelas) || 1;
+                    setForm({
+                      ...form,
+                      valorParcela,
+                      valor: (valorParcela * parcelas).toFixed(2)
+                    });
+                  }}
+                  step="0.01"
+                  className="w-full p-2 border border-gray-300 rounded-l"
+                  placeholder="Valor de cada parcela"
+                />
+                <span className="bg-gray-100 px-3 py-2 text-gray-600 border-t border-r border-b border-gray-300 rounded-r">
+                  × {form.parcelas || 1}
+                </span>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1">Valor Total</label>
+              <input
+                type="number"
+                name="valor"
+                value={form.valor}
+                onChange={(e) => {
+                  const valor = parseFloat(e.target.value) || 0;
+                  const parcelas = parseInt(form.parcelas) || 1;
+                  setForm({
+                    ...form,
+                    valor,
+                    valorParcela: (valor / parcelas).toFixed(2)
+                  });
+                }}
+                step="0.01"
+                className="w-full p-2 border border-gray-300 rounded"
+                placeholder="Valor total da compra"
+              />
+            </div>
           </div>
 
           <div>
@@ -1069,8 +1184,17 @@ export default function App() {
                   <td className="py-2 px-4 border-b text-right">
                     R$ {parseFloat(valorParcela(c.valor, c.parcelas)).toFixed(2)}
                   </td>
-                  <td className="py-2 px-4 border-b text-center">
-                    {calcularParcelaPorMes(c.data, c.parcelas, mesSelecionado, anoSelecionado)}/{c.parcelas}
+                  <td className="py-2 px-4 border-b">
+                    <div className="flex flex-col">
+                      <div className="text-center mb-1">
+                        {calcularParcelaPorMes(c.data, c.parcelas, mesSelecionado, anoSelecionado)}/{c.parcelas}
+                      </div>
+                      {renderBarraProgresso(
+                        calcularParcelaPorMes(c.data, c.parcelas, mesSelecionado, anoSelecionado),
+                        c.parcelas,
+                        parseFloat(valorParcela(c.valor, c.parcelas))
+                      )}
+                    </div>
                   </td>
                   <td className="py-2 px-4 border-b">{c.cartao}</td>
                   <td className="py-2 px-4 border-b">
