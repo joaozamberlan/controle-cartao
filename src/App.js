@@ -701,9 +701,15 @@ export default function App() {
     localStorage.setItem("categorias", JSON.stringify(categorias));
   }, [categorias]);
 
+  const [jaProcessouEstesMes, setJaProcessouEstesMes] = useState(new Set());
+
   useEffect(() => {
-    processarComprasRecorrentes();
-  }, [mesSelecionado, anoSelecionado]); // Processa quando mudar o mês/ano
+    const chaveAtual = `${mesSelecionado}-${anoSelecionado}`;
+    if (!jaProcessouEstesMes.has(chaveAtual)) {
+      processarComprasRecorrentes();
+      setJaProcessouEstesMes(prev => new Set([...prev, chaveAtual]));
+    }
+  }, [mesSelecionado, anoSelecionado, comprasRecorrentes]);
 
   useEffect(() => {
     localStorage.setItem("comprasRecorrentes", JSON.stringify(comprasRecorrentes));
@@ -1280,8 +1286,9 @@ export default function App() {
                   disabled={paginaAtual === 1}
                   className={`px-3 py-1 rounded ${paginaAtual === 1 ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
                 >
-                  &laquo;
+                  &laquo;&laquo;
                 </button>
+                
                 <button
                   onClick={() => setPaginaAtual(prev => Math.max(prev - 1, 1))}
                   disabled={paginaAtual === 1}
@@ -1301,12 +1308,13 @@ export default function App() {
                 >
                   &rsaquo;
                 </button>
+                
                 <button
                   onClick={() => setPaginaAtual(totalPaginas)}
                   disabled={paginaAtual === totalPaginas}
                   className={`px-3 py-1 rounded ${paginaAtual === totalPaginas ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
                 >
-                  &raquo;
+                  &raquo;&raquo;
                 </button>
               </div>
             </div>
@@ -1326,12 +1334,26 @@ export default function App() {
                   type="text"
                   value={novoUsuario}
                   onChange={(e) => setNovoUsuario(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && novoUsuario.trim()) {
+                      if (usuarios.includes(novoUsuario.trim())) {
+                        alert('Este usuário já existe!');
+                        return;
+                      }
+                      setUsuarios([...usuarios, novoUsuario.trim()]);
+                      setNovoUsuario("");
+                    }
+                  }}
                   placeholder="Nome do novo usuário"
                   className="flex-1 p-2 border border-gray-300 rounded"
                 />
                 <button
                   onClick={() => {
                     if (novoUsuario.trim()) {
+                      if (usuarios.includes(novoUsuario.trim())) {
+                        alert('Este usuário já existe!');
+                        return;
+                      }
                       setUsuarios([...usuarios, novoUsuario.trim()]);
                       setNovoUsuario("");
                     }
@@ -1348,7 +1370,21 @@ export default function App() {
                     <span>{usuario}</span>
                     <button
                       onClick={() => {
-                        if (window.confirm(`Deseja remover ${usuario}?`)) {
+                        if (usuarios.length <= 1) {
+                          alert('Deve ter pelo menos um usuário!');
+                          return;
+                        }
+                        
+                        // Verifica se o usuário tem compras vinculadas
+                        const temCompras = compras.some(c => c.quem === usuario || 
+                          (c.compartilhada && c.divisao?.some(d => d.usuario === usuario)));
+                        
+                        if (temCompras) {
+                          alert('Este usuário possui compras vinculadas e não pode ser removido!');
+                          return;
+                        }
+                        
+                        if (window.confirm(`Tem certeza que deseja remover o usuário "${usuario}"?`)) {
                           setUsuarios(usuarios.filter(u => u !== usuario));
                         }
                       }}
@@ -1363,7 +1399,10 @@ export default function App() {
 
             <div className="flex justify-end mt-4 pt-4 border-t">
               <button
-                onClick={() => setMostrarModalUsuarios(false)}
+                onClick={() => {
+                  setMostrarModalUsuarios(false);
+                  setNovoUsuario(""); // Limpa o campo
+                }}
                 className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
               >
                 Fechar
@@ -1409,13 +1448,19 @@ export default function App() {
                 <button
                   onClick={() => {
                     if (novoCartao.trim() && novoFechamento && novoVencimento) {
+                      // Verifica se já existe um cartão com o mesmo nome
+                      const cartaoExiste = cartoes.some(c => c.nome === novoCartao.trim());
+                      if (cartaoExiste) {
+                        alert('Este cartão já existe!');
+                        return;
+                      }
+                      
                       const novoCartaoObj = {
                         nome: novoCartao.trim(),
                         diaFechamento: parseInt(novoFechamento),
                         diaVencimento: parseInt(novoVencimento)
                       };
 
-                      // Adicione esta linha, que estava faltando
                       setCartoes(cartoesAtuais => [...cartoesAtuais, novoCartaoObj]);
 
                       // Limpa os campos
@@ -1456,7 +1501,14 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => {
-                          if (window.confirm(`Deseja remover o cartão ${cartao.nome}?`)) {
+                          // Verifica se o cartão tem compras vinculadas
+                          const temCompras = compras.some(c => c.cartao === cartao.nome);
+                          if (temCompras) {
+                            alert('Este cartão possui compras vinculadas e não pode ser removido!');
+                            return;
+                          }
+                          
+                          if (window.confirm(`Tem certeza que deseja remover o cartão "${cartao.nome}"?`)) {
                             setCartoes(prev => prev.filter((_, i) => i !== index));
                           }
                         }}
@@ -1474,6 +1526,7 @@ export default function App() {
               <button
                 onClick={() => {
                   setMostrarModalCartoes(false);
+                  // Limpa todos os campos
                   setNovoCartao("");
                   setNovoFechamento("");
                   setNovoVencimento("");
@@ -1578,12 +1631,16 @@ export default function App() {
                         <button
                           onClick={() => {
                             if (novaSubcategoria.trim()) {
-                              setCategorias(categorias.map(cat => 
-                                cat.id === categoria.id
-                                  ? { ...cat, subcategorias: [...cat.subcategorias, novaSubcategoria.trim()] }
-                                  : cat
-                              ));
-                              setNovaSubcategoria("");
+                              if (!categoria.subcategorias.includes(novaSubcategoria.trim())) {
+                                setCategorias(categorias.map(cat => 
+                                  cat.id === categoria.id
+                                    ? { ...cat, subcategorias: [...cat.subcategorias, novaSubcategoria.trim()] }
+                                    : cat
+                                ));
+                                setNovaSubcategoria("");
+                              } else {
+                                alert("Esta subcategoria já existe!");
+                              }
                             }
                           }}
                           className="bg-green-600 text-white py-1 px-3 rounded hover:bg-green-700"
@@ -1624,7 +1681,9 @@ export default function App() {
               <button
                 onClick={() => {
                   setMostrarModalCategorias(false);
+                  // Limpa os estados
                   setCategoriaParaEditar(null);
+                  setNovaSubcategoria("");
                 }}
                 className="bg-gray-500 text-white py-2 px-4 rounded hover:bg-gray-600"
               >
